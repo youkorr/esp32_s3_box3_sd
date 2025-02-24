@@ -37,3 +37,4 @@ async def to_code(config):
         sens = await sensor.new_sensor(config[CONF_TOTAL_SPACE])
         cg.add(var.set_total_space_sensor(sens))
 
+
