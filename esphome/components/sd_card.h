@@ -3,6 +3,7 @@
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
 #include <SD.h>
+#include <SPI.h>
 
 namespace esphome {
 namespace esp32_s3_box3_sd {
@@ -22,14 +23,12 @@ class ESP32S3Box3SDCard : public Component {
   sensor::Sensor *space_used_sensor_{nullptr};
   sensor::Sensor *total_space_sensor_{nullptr};
 
-  static const int SD_CMD = 38;
-  static const int SD_CLK = 39;
-  static const int SD_D0 = 40;
-  static const int SD_D1 = 41;
-  static const int SD_D2 = 42;
-  static const int SD_D3 = 45;
-  static const int SD_DET = 21;
+  static const int SD_CS = 13;    // Chip Select
+  static const int SD_MOSI = 15;  // MOSI
+  static const int SD_MISO = 33;  // MISO
+  static const int SD_SCK = 14;   // Clock
 };
 
 }  // namespace esp32_s3_box3_sd
 }  // namespace esphome
+
