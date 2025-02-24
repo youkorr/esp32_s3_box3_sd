@@ -1,4 +1,42 @@
 
+Dans votre configuration ESPHome, ajoutez :
+
+yaml
+external_components:
+  - source: github://youkorr/esphome-components
+    components: [ sd_card ]
+
+
+## Configuration
+
+Configuration minimale :
+
+yaml
+sd_card:
+
+sensor:
+  - platform: sd_card
+    space_used:
+      name: "SD Card Space Used"
+      unit_of_measurement: "MB"
+
+
+## Caractéristiques
+
+- Mesure de l'espace utilisé sur la carte SD
+- Mise à jour automatique toutes les 5 minutes
+- Compatible avec ESP32-S3-BOX-3
+
+## Pins utilisés
+
+- SCLK : GPIO14
+- MISO : GPIO33
+- MOSI : GPIO15
+- CS : GPIO13
+
+## License
+
+MIT License
  esphome/
     └── components/
             ├── __init__.py
