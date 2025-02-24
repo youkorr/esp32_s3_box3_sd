@@ -3,7 +3,7 @@ Dans votre configuration ESPHome, ajoutez :
 
 yaml
 external_components:
-  - source: github://youkorr/esphome-components
+  - source: https://github.com/youkorr/esp32_s3_box3_sd
     components: [ sd_card ]
 
 
