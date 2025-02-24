@@ -23,12 +23,13 @@ class ESP32S3Box3SDCard : public Component {
   sensor::Sensor *space_used_sensor_{nullptr};
   sensor::Sensor *total_space_sensor_{nullptr};
 
-  static const int SD_CS = 13;    // Chip Select
-  static const int SD_MOSI = 15;  // MOSI
-  static const int SD_MISO = 33;  // MISO
-  static const int SD_SCK = 14;   // Clock
+  static const int SD_CS = 12;    // Chip Select
+  static const int SD_MOSI = 14;  // MOSI
+  static const int SD_MISO = 19;  // MISO
+  static const int SD_SCK = 11;   // Clock
 };
 
 }  // namespace esp32_s3_box3_sd
 }  // namespace esphome
+
 
