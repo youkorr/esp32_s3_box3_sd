@@ -11,6 +11,7 @@ void ESP32S3Box3SDCard::setup() {
 
   // Initialize SD Card
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+
   if (!SD.begin(SD_CS, SPI)) {
     ESP_LOGE(TAG, "Card Mount Failed");
     return;
@@ -18,12 +19,11 @@ void ESP32S3Box3SDCard::setup() {
 
   uint8_t cardType = SD.cardType();
   if(cardType == CARD_NONE){
-      ESP_LOGE(TAG, "No SD card attached");
-      return;
+    ESP_LOGE(TAG, "No SD card attached");
+    return;
   }
 
   ESP_LOGI(TAG, "SD Card Type: %s", SD.cardTypeName(cardType));
-
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   ESP_LOGI(TAG, "SD Card Size: %lluMB", cardSize);
 
@@ -54,6 +54,11 @@ void ESP32S3Box3SDCard::update_sensors_() {
   }
 }
 
+bool ESP32S3Box3SDCard::sdcard_is_mounted() {
+  return SD.cardType() != CARD_NONE;
+}
+
 }  // namespace esp32_s3_box3_sd
 }  // namespace esphome
+
 
