@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor
+from esphome.components import sensor, binary_sensor
 from esphome.const import CONF_ID, UNIT_PERCENT, ICON_SD_CARD, UNIT_MEGABYTE
 
 DEPENDENCIES = ['esp32']
@@ -36,5 +36,6 @@ async def to_code(config):
     if CONF_TOTAL_SPACE in config:
         sens = await sensor.new_sensor(config[CONF_TOTAL_SPACE])
         cg.add(var.set_total_space_sensor(sens))
+
 
 
