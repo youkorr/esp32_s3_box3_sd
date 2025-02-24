@@ -1,0 +1,7 @@
+config/
+└── esphome/
+    └── custom_components/
+        └── esp32_s3_box3_sd/
+            ├── __init__.py
+            ├── sd_card.py
+            └── sd_card.h
