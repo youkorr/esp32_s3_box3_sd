@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import sensor
-from esphome.const import CONF_ID, UNIT_PERCENT, ICON_SD_CARD
+from esphome.const import CONF_ID, UNIT_PERCENT, ICON_SD_CARD, UNIT_MEGABYTE
 
 DEPENDENCIES = ['esp32']
 
@@ -19,7 +19,7 @@ CONFIG_SCHEMA = cv.Schema({
         accuracy_decimals=1
     ),
     cv.Optional(CONF_TOTAL_SPACE): sensor.sensor_schema(
-        unit_of_measurement="MB",
+        unit_of_measurement=UNIT_MEGABYTE,
         icon=ICON_SD_CARD,
         accuracy_decimals=0
     ),
@@ -36,3 +36,4 @@ async def to_code(config):
     if CONF_TOTAL_SPACE in config:
         sens = await sensor.new_sensor(config[CONF_TOTAL_SPACE])
         cg.add(var.set_total_space_sensor(sens))
+
