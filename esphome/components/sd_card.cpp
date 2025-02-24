@@ -56,3 +56,4 @@ void ESP32S3Box3SDCard::update_sensors_() {
 
 }  // namespace esp32_s3_box3_sd
 }  // namespace esphome
+
