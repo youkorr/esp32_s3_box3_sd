@@ -6,8 +6,8 @@ from esphome.const import CONF_ID
 DEPENDENCIES = ['spi']
 AUTO_LOAD = ['spi']
 
-sd_card_ns = cg.esphome_ns.namespace('sd_card')
-SDCard = sd_card_ns.class_('SDCard', cg.Component, spi.SPIDevice)
+sdcard_ns = cg.esphome_ns.namespace('sdcard')
+SDCard = sdcard_ns.class_('SDCard', cg.Component, spi.SPIDevice)
 
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(SDCard),
@@ -17,5 +17,6 @@ def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     yield cg.register_component(var, config)
     yield spi.register_spi_device(var, config)
+
 
 
