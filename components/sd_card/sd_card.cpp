@@ -18,7 +18,7 @@ void ESP32S3Box3SDCard::setup() {
   }
 
   uint8_t cardType = SD.cardType();
-  if(cardType == CARD_NONE){
+  if (cardType == CARD_NONE) {
     ESP_LOGE(TAG, "No SD card attached");
     return;
   }
@@ -30,9 +30,7 @@ void ESP32S3Box3SDCard::setup() {
   this->update_sensors_();
 }
 
-void ESP32S3Box3SDCard::loop() {
-  this->update_sensors_();
-}
+void ESP32S3Box3SDCard::loop() { this->update_sensors_(); }
 
 void ESP32S3Box3SDCard::dump_config() {
   ESP_LOGCONFIG(TAG, "SD Card Component:");
@@ -60,5 +58,6 @@ bool ESP32S3Box3SDCard::sdcard_is_mounted() {
 
 }  // namespace esp32_s3_box3_sd
 }  // namespace esphome
+
 
 
