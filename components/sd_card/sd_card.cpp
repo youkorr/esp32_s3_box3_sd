@@ -55,9 +55,9 @@ void ESP32S3Box3SDCard::update_sensors_() {
 bool ESP32S3Box3SDCard::sdcard_is_mounted() {
   return SD.cardType() != CARD_NONE;
 }
-
 }  // namespace esp32_s3_box3_sd
 }  // namespace esphome
+
 
 
 
