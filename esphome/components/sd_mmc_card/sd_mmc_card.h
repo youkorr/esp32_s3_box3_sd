@@ -17,10 +17,7 @@
 namespace esphome {
 namespace sd_mmc_card {
 
-static const int SD_CS = 12;
-static const int SD_MOSI = 14;
-static const int SD_MISO = 19;
-static const int SD_SCK = 11;
+
 
 enum MemoryUnits : short { Byte = 0, KiloByte = 1, MegaByte = 2, GigaByte = 3, TeraByte = 4, PetaByte = 5 };
 
