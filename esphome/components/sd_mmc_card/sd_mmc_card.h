@@ -1,5 +1,4 @@
 #pragma once
-
 #include "esphome/core/gpio.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/component.h"
@@ -93,11 +92,8 @@ class SdMmc : public Component {
   void set_data2_pin(uint8_t);
   void set_data3_pin(uint8_t);
   void set_mode_1bit(bool);
+  bool sdcard_is_mounted(); // Add this line
 
-    static const int SD_CS = 12;  // Chip Select  //ADDED
-  static const int SD_MOSI = 14; // MOSI      //ADDED
-  static const int SD_MISO = 19; // MISO      //ADDED
-  static const int SD_SCK = 11;  // Clock     //ADDED
 protected:
   ErrorCode init_error_;
   uint8_t clk_pin_;
@@ -157,3 +153,4 @@ template class SdMmcAppendFileAction : public Action {
 };
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
