@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor, binary_sensor
+from esphome import automation, pins
 from esphome.const import (
     CONF_ID,
     CONF_DATA,
@@ -8,10 +8,8 @@ from esphome.const import (
     CONF_CLK_PIN,
     CONF_INPUT,
     CONF_OUTPUT,
-    CONF_NAME,
 )
 from esphome.core import CORE
-from esphome import automation, pins
 
 CONF_SD_MMC_CARD_ID = "sd_mmc_card_id"
 CONF_CMD_PIN = "cmd_pin"
@@ -20,7 +18,6 @@ CONF_DATA1_PIN = "data1_pin"
 CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
-CONF_CARD_DETECTED = "card_detected" #ADDED
 
 sd_mmc_card_component_ns = cg.esphome_ns.namespace("sd_mmc_card")
 SdMmc = sd_mmc_card_component_ns.class_("SdMmc", cg.Component)
@@ -41,8 +38,6 @@ def validate_raw_data(value):
         "data must either be a string wrapped in quotes or a list of bytes"
     )
 
-MULTI_CONF = True
-
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(SdMmc),
@@ -53,19 +48,20 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
-        cv.Optional(CONF_CARD_DETECTED): binary_sensor.binary_sensor_schema({
-            cv.Optional(CONF_NAME, default="SD Card Detected"): cv.string,
-        }),
     }
 ).extend(cv.COMPONENT_SCHEMA)
+
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+
     cg.add(var.set_mode_1bit(config[CONF_MODE_1BIT]))
+
     cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
     cg.add(var.set_cmd_pin(config[CONF_CMD_PIN]))
     cg.add(var.set_data0_pin(config[CONF_DATA0_PIN]))
+
     if (config[CONF_MODE_1BIT] == False):
         cg.add(var.set_data1_pin(config[CONF_DATA1_PIN]))
         cg.add(var.set_data2_pin(config[CONF_DATA2_PIN]))
@@ -75,12 +71,7 @@ async def to_code(config):
         if CORE.is_esp32:
             cg.add_library("FS", None)
             cg.add_library("SD_MMC", None)
-            cg.add_define("SD_MMC_SDCARD_CS_PIN", SD_MMC_SDCARD_CS_PIN)
 
-    if CONF_CARD_DETECTED in config:
-        conf = config[CONF_CARD_DETECTED]
-        sens = await binary_sensor.new_binary_sensor(conf)
-        cg.add(var.set_card_detect_sensor(sens))
 
 SD_MMC_PATH_ACTION_SCHEMA = cv.Schema(
     {
@@ -109,6 +100,7 @@ async def sd_mmc_write_file_to_code(config, action_id, template_arg, args):
     cg.add(var.set_data(data_))
     return var
 
+
 @automation.register_action(
     "sd_mmc_card.append_file", SdMmcAppendFileAction, SD_MMC_WRITE_FILE_ACTION_SCHEMA
 )
@@ -121,6 +113,7 @@ async def sd_mmc_append_file_to_code(config, action_id, template_arg, args):
     cg.add(var.set_data(data_))
     return var
 
+
 @automation.register_action(
     "sd_mmc_card.create_directory", SdMmcCreateDirectoryAction, SD_MMC_PATH_ACTION_SCHEMA
 )
@@ -131,6 +124,7 @@ async def sd_mmc_create_directory_to_code(config, action_id, template_arg, args)
     cg.add(var.set_path(path_))
     return var
 
+
 @automation.register_action(
     "sd_mmc_card.remove_directory", SdMmcRemoveDirectoryAction, SD_MMC_PATH_ACTION_SCHEMA
 )
@@ -140,6 +134,7 @@ async def sd_mmc_remove_directory_to_code(config, action_id, template_arg, args)
     path_ = await cg.templatable(config[CONF_PATH], args, cg.std_string)
     cg.add(var.set_path(path_))
     return var
+
 
 @automation.register_action(
     "sd_mmc_card.delete_file", SdMmcDeleteFileAction, SD_MMC_PATH_ACTION_SCHEMA
