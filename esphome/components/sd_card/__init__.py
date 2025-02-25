@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import automation
-from esphome.const import CONF_ID, CONF_PATH, CONF_AUTO_MOUNT
+from esphome.const import CONF_ID, CONF_PATH
 from esphome.core import CORE
 
 # Déclaration des composants
@@ -23,6 +23,9 @@ SD_MMC_LOAD_IMAGE_ACTION_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.use_id(SdMmc),
     cv.Required(CONF_PATH): cv.templatable(cv.string_strict),
 })
+
+# Définition de la constante CONF_AUTO_MOUNT
+CONF_AUTO_MOUNT = "auto_mount"
 
 # Schéma de configuration pour le composant SD Card
 CONFIG_SCHEMA = cv.Schema({
