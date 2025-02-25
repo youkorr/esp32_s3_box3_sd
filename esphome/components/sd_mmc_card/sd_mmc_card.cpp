@@ -1,11 +1,6 @@
 #include "sd_mmc_card.h"
 #include "esphome/core/log.h"
 
-#define SD_CS 12
-#define SD_MOSI 14
-#define SD_MISO 19
-#define SD_SCK 11
-
 #ifdef USE_ESP32
 
 #include <FS.h>
@@ -93,5 +88,10 @@ void SdMmc::update_sensors() {
   }
 }
 
+bool SdMmc::sdcard_is_mounted() {
+  return SD.cardType() != CARD_NONE;
+}
+
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
