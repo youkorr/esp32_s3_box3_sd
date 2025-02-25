@@ -154,3 +154,4 @@ template class SdMmcAppendFileAction : public Action {
 }  // namespace sd_mmc_card
 }  // namespace esphome
 
+
