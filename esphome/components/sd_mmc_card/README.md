@@ -6,14 +6,12 @@ SD MMC cards components for esphome.
 
 ```yaml
 sd_mmc_card:
-  id: sd_mmc_card
-  mode_1bit: false
-  clk_pin: GPIO14
-  cmd_pin: GPIO15
-  data0_pin: GPIO2
-  data1_pin: GPIO4
-  data2_pin: GPIO12
-  data3_pin: GPIO13
+  id: sd_box
+  data3_pin: GPIO12
+  cmd_pin: GPIO14
+  data0_pin: GPIO9
+  clk_pin: 11
+  mode_1bit: true
 ```
 
 * **mode_1bit** (Optional, bool): specify wether to use 1 or 4 bit lane
