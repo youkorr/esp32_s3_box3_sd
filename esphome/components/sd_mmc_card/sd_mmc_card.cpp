@@ -95,3 +95,5 @@ bool SdMmc::sdcard_is_mounted() {
 }  // namespace sd_mmc_card
 }  // namespace esphome
 
+
+
