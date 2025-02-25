@@ -1,4 +1,5 @@
 #pragma once
+
 #include "esphome/core/gpio.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/component.h"
@@ -18,6 +19,11 @@
 
 namespace esphome {
 namespace sd_mmc_card {
+
+static const int SD_CS = 12;
+static const int SD_MOSI = 14;
+static const int SD_MISO = 19;
+static const int SD_SCK = 11;
 
 enum MemoryUnits : short { Byte = 0, KiloByte = 1, MegaByte = 2, GigaByte = 3, TeraByte = 4, PetaByte = 5 };
 
@@ -51,6 +57,7 @@ class SdMmc : public Component {
   void set_card_detect_sensor(binary_sensor::BinarySensor *card_detect_sensor) {
     this->card_detect_sensor_ = card_detect_sensor;
   }
+   bool sdcard_is_mounted();  // Ajout de la méthode sdcard_is_mounted
  private:
   binary_sensor::BinarySensor *card_detect_sensor_{nullptr};
 #endif
@@ -92,7 +99,7 @@ class SdMmc : public Component {
   void set_data2_pin(uint8_t);
   void set_data3_pin(uint8_t);
   void set_mode_1bit(bool);
-  bool sdcard_is_mounted(); // Add this line
+  bool sdcard_is_mounted();  // Ajout de la méthode sdcard_is_mounted
 
 protected:
   ErrorCode init_error_;
@@ -153,5 +160,6 @@ template class SdMmcAppendFileAction : public Action {
 };
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
 
 
