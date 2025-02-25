@@ -29,13 +29,11 @@ void SdMmc::setup() {
   if (!SD_MMC.begin()) {
     ESP_LOGE(TAG, "Failed to mount SD card");
     this->mark_failed();
+    mounted_ = false;  // Carte SD non montée
     return;
   }
   ESP_LOGI(TAG, "SD card mounted successfully");
-
-  // Initialiser la lecture audio
-  audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT); // Configure les broches I2S
-  audio.setVolume(10); // Volume par défaut (0-21)
+  mounted_ = true;  // Carte SD montée
 }
 
 void SdMmc::loop() {
@@ -43,6 +41,10 @@ void SdMmc::loop() {
 }
 
 bool SdMmc::play_audio(const char *path) {
+  if (!mounted_) {
+    ESP_LOGE(TAG, "SD card is not mounted");
+    return false;
+  }
   if (!SD_MMC.exists(path)) {
     ESP_LOGE(TAG, "File not found: %s", path);
     return false;
@@ -52,6 +54,10 @@ bool SdMmc::play_audio(const char *path) {
 }
 
 bool SdMmc::load_image(const char *path, uint8_t *buffer, size_t buffer_size) {
+  if (!mounted_) {
+    ESP_LOGE(TAG, "SD card is not mounted");
+    return false;
+  }
   pngFile = SD_MMC.open(path, "r");
   if (!pngFile) {
     ESP_LOGE(TAG, "Failed to open file: %s", path);
