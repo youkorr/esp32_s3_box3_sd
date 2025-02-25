@@ -99,7 +99,6 @@ class SdMmc : public Component {
   void set_data2_pin(uint8_t);
   void set_data3_pin(uint8_t);
   void set_mode_1bit(bool);
-  bool sdcard_is_mounted();  // Ajout de la méthode sdcard_is_mounted
 
 protected:
   ErrorCode init_error_;
@@ -129,35 +128,34 @@ protected:
   static std::string error_code_to_string(ErrorCode);
 };
 
-template class SdMmcWriteFileAction : public Action {
+template class SdMmcWriteFileAction : public Action<std::string, std::vector<uint8_t>> {
  public:
   SdMmcWriteFileAction(SdMmc *parent) : parent_(parent) {}
   TEMPLATABLE_VALUE(std::string, path)
-  TEMPLATABLE_VALUE(std::vector, data)
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    auto buffer = this->data_.value(x...);
-    this->parent_->write_file(path.c_str(), buffer.data(), buffer.size());
+  TEMPLATABLE_VALUE(std::vector<uint8_t>, data)
+  void play(std::string path, std::vector<uint8_t> data) {
+    this->parent_->write_file(path.c_str(), data.data(), data.size());
+  }
 
-protected:
-SdMmc *parent_;
+ protected:
+  SdMmc *parent_;
 };
 
-template class SdMmcAppendFileAction : public Action {
-public:
-SdMmcAppendFileAction(SdMmc *parent) : parent_(parent) {}
-TEMPLATABLE_VALUE(std::string, path)
-TEMPLATABLE_VALUE(std::vector, data)
-void play(Ts... x) {
-auto path = this->path_.value(x...);
-auto buffer = this->data_.value(x...);
-this->parent_->append_file(path.c_str(), buffer.data(), buffer.size());
+template class SdMmcAppendFileAction : public Action<std::string, std::vector<uint8_t>> {
+ public:
+  SdMmcAppendFileAction(SdMmc *parent) : parent_(parent) {}
+  TEMPLATABLE_VALUE(std::string, path)
+  TEMPLATABLE_VALUE(std::vector<uint8_t>, data)
+  void play(std::string path, std::vector<uint8_t> data) {
+    this->parent_->append_file(path.c_str(), data.data(), data.size());
+  }
 
-protected:
-SdMmc *parent_;
+ protected:
+  SdMmc *parent_;
 };
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
 
 
 
