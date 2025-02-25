@@ -15,6 +15,16 @@
 namespace esphome {
 namespace sd_card {
 
+// Déclaration de la structure FileInfo
+struct FileInfo {
+  std::string path;
+  size_t size;
+  bool is_directory;
+
+  FileInfo(std::string const &path, size_t size, bool is_directory)
+      : path(path), size(size), is_directory(is_directory) {}
+};
+
 class SdMmc : public Component {
  public:
   void setup() override;
@@ -54,14 +64,6 @@ class SdMmc : public Component {
   };
 
   static std::string error_code_to_string(ErrorCode code);
-
-  struct FileInfo {
-    std::string path;
-    size_t size;
-    bool is_directory;
-
-    FileInfo(std::string const &path, size_t size, bool is_directory);
-  };
 
 #ifdef USE_SENSOR
   void add_file_size_sensor(sensor::Sensor *sensor, std::string const &path);
