@@ -9,6 +9,7 @@ from esphome.const import (
     CONF_INPUT,
     CONF_OUTPUT,
     CONF_NAME,
+    CONF_CARD_DETECTED
 )
 from esphome.core import CORE
 from esphome import automation, pins
@@ -20,7 +21,6 @@ CONF_DATA1_PIN = "data1_pin"
 CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
-CONF_CARD_DETECTED = "card_detected"
 
 sd_mmc_card_component_ns = cg.esphome_ns.namespace("sd_mmc_card")
 SdMmc = sd_mmc_card_component_ns.class_("SdMmc", cg.Component)
@@ -75,6 +75,7 @@ async def to_code(config):
         if CORE.is_esp32:
             cg.add_library("FS", None)
             cg.add_library("SD_MMC", None)
+            cg.add_define("SD_MMC_SDCARD_CS_PIN", SD_MMC_SDCARD_CS_PIN)
 
     if CONF_CARD_DETECTED in config:
         conf = config[CONF_CARD_DETECTED]
@@ -149,6 +150,7 @@ async def sd_mmc_delete_file_to_code(config, action_id, template_arg, args):
     path_ = await cg.templatable(config[CONF_PATH], args, cg.std_string)
     cg.add(var.set_path(path_))
     return var
+
 
 
 
