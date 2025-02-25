@@ -138,28 +138,27 @@ template class SdMmcWriteFileAction : public Action {
     auto path = this->path_.value(x...);
     auto buffer = this->data_.value(x...);
     this->parent_->write_file(path.c_str(), buffer.data(), buffer.size());
-  }
 
- protected:
-  SdMmc *parent_;
+protected:
+SdMmc *parent_;
 };
 
 template class SdMmcAppendFileAction : public Action {
- public:
-  SdMmcAppendFileAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-  TEMPLATABLE_VALUE(std::vector, data)
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    auto buffer = this->data_.value(x...);
-    this->parent_->append_file(path.c_str(), buffer.data(), buffer.size());
-  }
+public:
+SdMmcAppendFileAction(SdMmc *parent) : parent_(parent) {}
+TEMPLATABLE_VALUE(std::string, path)
+TEMPLATABLE_VALUE(std::vector, data)
+void play(Ts... x) {
+auto path = this->path_.value(x...);
+auto buffer = this->data_.value(x...);
+this->parent_->append_file(path.c_str(), buffer.data(), buffer.size());
 
- protected:
-  SdMmc *parent_;
+protected:
+SdMmc *parent_;
 };
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
 
 
 
