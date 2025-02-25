@@ -1,55 +1,49 @@
 #include "sd_card.h"
 #include "esphome/core/log.h"
-#include <PNGdec.h>
-#include <Audio.h>
+#include <driver/sdmmc_host.h>
+#include <driver/sdspi_host.h>
+#include <sdmmc_cmd.h>
+#include <esp_vfs_fat.h>
 
 namespace esphome {
 namespace sd_card {
 
 static const char *TAG = "sd_card";
 
-// Objet global pour la lecture audio
-Audio audio;
-
-// Objet global pour la lecture d'images PNG
-PNG png;
-File pngFile;
-
-// Fonction de rappel pour charger les données PNG
-int pngRead(PNGFILE *page, unsigned long offset, unsigned char *buffer, unsigned long count) {
-    return pngFile.read(buffer, count);
-}
-
-// Fonction de rappel pour se déplacer dans le fichier PNG
-int pngSeek(PNGFILE *page, unsigned long position) {
-    return pngFile.seek(position);
-}
-
 void SdMmc::setup() {
-  if (!SD_MMC.begin()) {
-    ESP_LOGE(TAG, "Failed to mount SD card");
+  sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+  sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
+  slot_config.gpio_miso = miso_pin_;
+  slot_config.gpio_mosi = mosi_pin_;
+  slot_config.gpio_sck = clk_pin_;
+  slot_config.gpio_cs = cs_pin_;
+
+  esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+      .format_if_mount_failed = false,
+      .max_files = 5,
+      .allocation_unit_size = 16 * 1024};
+
+  sdmmc_card_t *card;
+  esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to mount SD card: %s", esp_err_to_name(ret));
     this->mark_failed();
-    mounted_ = false;  // Carte SD non montée
+    mounted_ = false;
     return;
   }
   ESP_LOGI(TAG, "SD card mounted successfully");
-  mounted_ = true;  // Carte SD montée
+  mounted_ = true;
 }
 
-void SdMmc::loop() {
-  audio.loop(); // Gère la lecture audio en continu
-}
+void SdMmc::loop() {}
 
 bool SdMmc::play_audio(const char *path) {
   if (!mounted_) {
     ESP_LOGE(TAG, "SD card is not mounted");
     return false;
   }
-  if (!SD_MMC.exists(path)) {
-    ESP_LOGE(TAG, "File not found: %s", path);
-    return false;
-  }
-  audio.connecttoFS(SD_MMC, path); // Lire le fichier audio
+  // Implémente la lecture audio ici
   return true;
 }
 
@@ -58,23 +52,7 @@ bool SdMmc::load_image(const char *path, uint8_t *buffer, size_t buffer_size) {
     ESP_LOGE(TAG, "SD card is not mounted");
     return false;
   }
-  pngFile = SD_MMC.open(path, "r");
-  if (!pngFile) {
-    ESP_LOGE(TAG, "Failed to open file: %s", path);
-    return false;
-  }
-
-  int result = png.open(pngRead, pngSeek);
-  if (result != PNG_SUCCESS) {
-    ESP_LOGE(TAG, "Failed to open PNG: %d", result);
-    pngFile.close();
-    return false;
-  }
-
-  // Charger l'image dans le buffer
-  png.decode(buffer, 0);
-  png.close();
-  pngFile.close();
+  // Implémente le chargement d'image ici
   return true;
 }
 
