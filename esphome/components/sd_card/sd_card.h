@@ -7,10 +7,10 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <vector>
 #include <string>
-#include <FS.h>
-#include <SD_MMC.h>
-#include <PNGdec.h> // Pour les images PNG
-#include <Audio.h>  // Pour la lecture audio
+#include <driver/sdmmc_host.h>
+#include <driver/sdspi_host.h>
+#include <sdmmc_cmd.h>
+#include <esp_vfs_fat.h>
 
 namespace esphome {
 namespace sd_card {
@@ -42,13 +42,10 @@ class SdMmc : public Component {
   bool delete_file(std::string const &path);
   std::vector<uint8_t> read_file(std::string const &path);
 
+  void set_cs_pin(uint8_t pin) { cs_pin_ = pin; }
+  void set_mosi_pin(uint8_t pin) { mosi_pin_ = pin; }
+  void set_miso_pin(uint8_t pin) { miso_pin_ = pin; }
   void set_clk_pin(uint8_t pin) { clk_pin_ = pin; }
-  void set_cmd_pin(uint8_t pin) { cmd_pin_ = pin; }
-  void set_data0_pin(uint8_t pin) { data0_pin_ = pin; }
-  void set_data1_pin(uint8_t pin) { data1_pin_ = pin; }
-  void set_data2_pin(uint8_t pin) { data2_pin_ = pin; }
-  void set_data3_pin(uint8_t pin) { data3_pin_ = pin; }
-  void set_mode_1bit(bool b) { mode_1bit_ = b; }
 
   enum class ErrorCode {
     ERR_PIN_SETUP,
@@ -74,14 +71,11 @@ class SdMmc : public Component {
   void write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode);
   void list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list);
 
+  uint8_t cs_pin_;
+  uint8_t mosi_pin_;
+  uint8_t miso_pin_;
   uint8_t clk_pin_;
-  uint8_t cmd_pin_;
-  uint8_t data0_pin_;
-  uint8_t data1_pin_;
-  uint8_t data2_pin_;
-  uint8_t data3_pin_;
-  bool mode_1bit_ = false;
-  bool mounted_ = false;  // Variable pour suivre l'état de montage
+  bool mounted_ = false;
 
 #ifdef USE_SENSOR
   struct FileSizeSensor {
