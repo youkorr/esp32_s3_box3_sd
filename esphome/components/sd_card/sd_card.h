@@ -27,6 +27,9 @@ class SdMmc : public Component {
   // Méthodes pour la lecture d'images
   bool load_image(const char *path, uint8_t *buffer, size_t buffer_size);
 
+  // Méthode pour vérifier si la carte SD est montée
+  bool is_mounted() const { return mounted_; }
+
   // Méthodes existantes pour la gestion des fichiers
   void write_file(const char *path, const uint8_t *buffer, size_t len);
   void append_file(const char *path, const uint8_t *buffer, size_t len);
@@ -78,6 +81,7 @@ class SdMmc : public Component {
   uint8_t data2_pin_;
   uint8_t data3_pin_;
   bool mode_1bit_ = false;
+  bool mounted_ = false;  // Variable pour suivre l'état de montage
 
 #ifdef USE_SENSOR
   struct FileSizeSensor {
