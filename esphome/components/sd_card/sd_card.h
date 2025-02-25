@@ -7,6 +7,10 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <vector>
 #include <string>
+#include <FS.h>
+#include <SD_MMC.h>
+#include <PNGdec.h> // Pour les images PNG
+#include <Audio.h>  // Pour la lecture audio
 
 namespace esphome {
 namespace sd_card {
@@ -17,6 +21,13 @@ class SdMmc : public Component {
   void loop() override;
   void dump_config() override;
 
+  // Méthodes pour la lecture audio
+  bool play_audio(const char *path);
+
+  // Méthodes pour la lecture d'images
+  bool load_image(const char *path, uint8_t *buffer, size_t buffer_size);
+
+  // Méthodes existantes pour la gestion des fichiers
   void write_file(const char *path, const uint8_t *buffer, size_t len);
   void append_file(const char *path, const uint8_t *buffer, size_t len);
   std::vector<std::string> list_directory(const char *path, uint8_t depth = 0);
