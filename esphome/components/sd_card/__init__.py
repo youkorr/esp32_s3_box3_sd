@@ -32,10 +32,10 @@ CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(SdMmc),
     cv.Optional(CONF_AUTO_MOUNT, default=True): cv.boolean,  # Montage automatique activé par défaut
     cv.Required("mode"): cv.enum({"SPI": "SPI", "MMC": "MMC"}),  # Mode de communication (SPI ou MMC)
-    cv.Required("cs_pin"): cv.gpio_output_pin_schema,  # Broche Chip Select (CS)
-    cv.Optional("mosi_pin"): cv.gpio_output_pin_schema,  # Broche MOSI (Data In)
-    cv.Optional("miso_pin"): cv.gpio_input_pin_schema,  # Broche MISO (Data Out)
-    cv.Required("clk_pin"): cv.gpio_output_pin_schema,  # Broche Clock (CLK)
+    cv.Required("cs_pin"): cv.int_range(min=0, max=40),  # Broche Chip Select (CS)
+    cv.Optional("mosi_pin"): cv.int_range(min=0, max=40),  # Broche MOSI (Data In)
+    cv.Optional("miso_pin"): cv.int_range(min=0, max=40),  # Broche MISO (Data Out)
+    cv.Required("clk_pin"): cv.int_range(min=0, max=40),  # Broche Clock (CLK)
 }).extend(cv.COMPONENT_SCHEMA)
 
 # Fonction pour enregistrer l'action de lecture audio
@@ -62,19 +62,14 @@ async def to_code(config):
     await cg.register_component(var, config)
 
     # Configuration des broches
-    cs_pin = await cg.gpio_pin_expression(config["cs_pin"])
-    cg.add(var.set_cs_pin(cs_pin))
-
-    clk_pin = await cg.gpio_pin_expression(config["clk_pin"])
-    cg.add(var.set_clk_pin(clk_pin))
+    cg.add(var.set_cs_pin(config["cs_pin"]))
+    cg.add(var.set_clk_pin(config["clk_pin"]))
 
     if "mosi_pin" in config:
-        mosi_pin = await cg.gpio_pin_expression(config["mosi_pin"])
-        cg.add(var.set_mosi_pin(mosi_pin))
+        cg.add(var.set_mosi_pin(config["mosi_pin"]))
 
     if "miso_pin" in config:
-        miso_pin = await cg.gpio_pin_expression(config["miso_pin"])
-        cg.add(var.set_miso_pin(miso_pin))
+        cg.add(var.set_miso_pin(config["miso_pin"]))
 
     # Montage automatique de la carte SD
     if config[CONF_AUTO_MOUNT]:
