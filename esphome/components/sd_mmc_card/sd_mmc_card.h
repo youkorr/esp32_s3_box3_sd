@@ -17,8 +17,6 @@
 namespace esphome {
 namespace sd_mmc_card {
 
-
-
 enum MemoryUnits : short { Byte = 0, KiloByte = 1, MegaByte = 2, GigaByte = 3, TeraByte = 4, PetaByte = 5 };
 
 #ifdef USE_SENSOR
