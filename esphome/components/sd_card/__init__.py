@@ -6,7 +6,6 @@ from esphome.const import (
     DEVICE_CLASS_DATA_SIZE,
     ENTITY_CATEGORY_DIAGNOSTIC,
     STATE_CLASS_MEASUREMENT,
-    UNIT_GIBIBYTE,
 )
 
 DEPENDENCIES = ["esp32", "sensor", "text_sensor"]
