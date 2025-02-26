@@ -13,7 +13,7 @@ from esphome.const import (
 DEPENDENCIES = ["esp32"]
 CODEOWNERS = ["@votreadressee"]
 
-CONF_SD_BOX_CARD = "sd_box_card"
+CONF_SD_CARD = "sd_card"
 CONF_CLK_PIN = "clk_pin"
 CONF_CMD_PIN = "cmd_pin"
 CONF_DATA0_PIN = "data0_pin"
