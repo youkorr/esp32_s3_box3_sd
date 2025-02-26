@@ -5,6 +5,9 @@
 
 static const char *TAG = "sd_card";
 
+// Définir la taille du secteur
+#define SECTOR_SIZE 512  // Taille standard du secteur
+
 namespace esphome {
 namespace sd_card {
 
@@ -99,14 +102,14 @@ esp_err_t SDCard::init_sdmmc() {
   
   // Configurer les broches pour SDMMC
   sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-  slot_config.clk = this->clk_pin_;
-  slot_config.cmd = this->cmd_pin_;
-  slot_config.d0 = this->data0_pin_;
+  slot_config.clk = static_cast<gpio_num_t>(this->clk_pin_);
+  slot_config.cmd = static_cast<gpio_num_t>(this->cmd_pin_);
+  slot_config.d0 = static_cast<gpio_num_t>(this->data0_pin_);
   
   if (!this->mode_1bit_) {
-    slot_config.d1 = this->data1_pin_;
-    slot_config.d2 = this->data2_pin_;
-    slot_config.d3 = this->data3_pin_;
+    slot_config.d1 = static_cast<gpio_num_t>(this->data1_pin_);
+    slot_config.d2 = static_cast<gpio_num_t>(this->data2_pin_);
+    slot_config.d3 = static_cast<gpio_num_t>(this->data3_pin_);
     slot_config.width = 4;
   } else {
     slot_config.width = 1;
@@ -155,16 +158,16 @@ std::string SDCard::get_card_type_str() {
   if (this->card_ == nullptr)
     return "Unknown";
     
-  switch (this->card_->card_type) {
-    case SDMMC_CARD_SDSC:
+  switch (this->card_->type) {
+    case SDMMC_CARD_TYPE_SDSC:
       return "SDSC";
-    case SDMMC_CARD_SDHC:
+    case SDMMC_CARD_TYPE_SDHC:
       return "SDHC";
-    case SDMMC_CARD_SDXC:
+    case SDMMC_CARD_TYPE_SDXC:
       return "SDXC";
-    case SDMMC_CARD_MMC:
+    case SDMMC_CARD_TYPE_MMC:
       return "MMC";
-    case SDMMC_CARD_MMC_HC:
+    case SDMMC_CARD_TYPE_MMC_HC:
       return "MMC HC";
     default:
       return "Unknown";
@@ -207,6 +210,7 @@ void SDCard::update_space_info() {
 
 }  // namespace sd_card
 }  // namespace esphome
+
 
 
 
