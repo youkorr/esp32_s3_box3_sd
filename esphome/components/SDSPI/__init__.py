@@ -71,30 +71,7 @@ async def to_code(config):
         if CORE.is_esp32:
             cg.add_library("FS", None)
             cg.add_library("SD_MMC", None)
-    # Montage automatique de la carte SD
-    cg.add_define("USE_SD_MMC")
-    cg.add(
-        f"""
-        esp_vfs_fat_sdmmc_mount_config_t mount_config = {{
-            .format_if_mount_failed = false,
-            .max_files = 5,
-            .allocation_unit_size = 16 * 1024
-        }};
-        sdmmc_card_t *card;
-        esp_err_t ret = esp_vfs_fat_sdmmc_mount(
-            {config[CONF_MOUNT_POINT]},
-            &host,
-            &slot_config,
-            &mount_config,
-            &card
-        );
-        if (ret != ESP_OK) {{
-            ESP_LOGE("SDPI", "Failed to mount SD card: %s", esp_err_to_name(ret));
-            return;
-        }}
-        ESP_LOGI("SDPI", "SD card mounted at %s", {config[CONF_MOUNT_POINT]});
-        """
-    )
+
 
 SD_MMC_PATH_ACTION_SCHEMA = cv.Schema(
     {
