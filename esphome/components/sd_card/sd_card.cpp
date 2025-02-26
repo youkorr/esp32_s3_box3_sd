@@ -161,7 +161,7 @@ std::string SDCard::get_card_type_str() {
   
   // Accéder au type directement avec les structures ESP-IDF
   uint32_t cid[4];
-  esp_err_t ret = sdmmc_io_read_cid(card, cid);
+  esp_err_t ret = sdmmc_card_get_cid(card, cid);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to read CID");
     return "Unknown";
