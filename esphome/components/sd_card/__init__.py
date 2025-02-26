@@ -31,7 +31,7 @@ SDCard = sd_card_ns.class_("SDCard", cg.Component)
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_SD_BOX_CARD): cv.Schema(
+        cv.Required(CONF_SD_CARD): cv.Schema(
             {
                 cv.GenerateID(): cv.declare_id(SDCard),
                 cv.Required(CONF_CLK_PIN): cv.gpio_pin,
@@ -51,7 +51,7 @@ CONFIG_SCHEMA = cv.Schema(
 )
 
 async def to_code(config):
-    sd_config = config[CONF_SD_BOX_CARD]
+    sd_config = config[CONF_SD_CARD]
     var = cg.new_Pvariable(sd_config[CONF_ID])
     await cg.register_component(var, sd_config)
 
