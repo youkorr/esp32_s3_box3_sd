@@ -11,7 +11,7 @@ from esphome.const import (
 )
 
 DEPENDENCIES = ["esp32"]
-CODEOWNERS = ["@youkorr"]
+CODEOWNERS = ["@votreadressee"]
 
 CONF_SD_BOX_CARD = "sd_box_card"
 CONF_CLK_PIN = "clk_pin"
