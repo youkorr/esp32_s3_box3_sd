@@ -41,15 +41,6 @@ This component use the SD_MMC library and share its limitations, for more detail
 4 bit lane does not work with arduino framework version prior to ```2.0.7```, due to an issue in the SD_MMC setPins function.
 The issue as been fix by the pull request [espressif/arduino-esp32/#7646](https://github.com/espressif/arduino-esp32/pull/7646)
 
-The recommended version by esphome is ```2.0.5```.
-
-```yaml
-esp32:
-  board: esp32dev
-  framework:
-    type: arduino
-    version: latest
-```
 
 #### ESP-IDF Framework
 
