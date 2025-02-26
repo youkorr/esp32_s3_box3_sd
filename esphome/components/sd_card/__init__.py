@@ -33,10 +33,10 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(): cv.declare_id(SDCard),
         cv.Required(CONF_CLK_PIN): pins.internal_gpio_output_pin_number,
         cv.Required(CONF_CMD_PIN): pins.internal_gpio_output_pin_number,
-        cv.Required(CONF_DATA0_PIN): pins.internal_gpio_pin_number({pins.PIN_OUTPUT: True, pins.PIN_INPUT: True}),
-        cv.Optional(CONF_DATA1_PIN): pins.internal_gpio_pin_number({pins.PIN_OUTPUT: True, pins.PIN_INPUT: True}),
-        cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number({pins.PIN_OUTPUT: True, pins.PIN_INPUT: True}),
-        cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number({pins.PIN_OUTPUT: True, pins.PIN_INPUT: True}),
+        cv.Required(CONF_DATA0_PIN): pins.internal_gpio_pin_number,
+        cv.Optional(CONF_DATA1_PIN): pins.internal_gpio_pin_number,
+        cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number,
+        cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number,
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
@@ -77,6 +77,7 @@ async def to_code(config):
 
     cg.add_define("USE_SD_CARD")
     cg.add_build_flag("-DUSE_ESP_IDF")
+
 
 
 
