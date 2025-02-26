@@ -20,8 +20,8 @@ CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
 
-sd_card_component_ns = cg.esphome_ns.namespace("sd_card")
-SdMmc = sd_card_component_ns.class_("SdMmc", cg.Component)
+sd_card_ns = cg.esphome_ns.namespace("sd_card")
+SDCard = sd_card_ns.class_("SDCard", cg.Component)
 
 # Actions
 SdCardWriteFileAction = sd_card_component_ns.class_("SdCardWriteFileAction", automation.Action)
