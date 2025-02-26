@@ -43,3 +43,4 @@ async def to_code(config):
     func = getattr(sd_card, f"set_{config[CONF_TYPE]}_sensor")
     cg.add(func(var))
 
+
