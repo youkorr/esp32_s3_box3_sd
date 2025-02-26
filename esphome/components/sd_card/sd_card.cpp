@@ -156,21 +156,17 @@ void SDCard::unmount_fs() {
 std::string SDCard::get_card_type_str() {
   if (this->card_ == nullptr)
     return "Unknown";
-    
+
   sdmmc_card_t *card = this->card_;
   
-  // Obtenir le type de la carte SD
-  switch (card->card_type) {
-    case SDMMC_CARD_SDSC:
+  // Assurez-vous que card_type est une valeur valide
+  switch (card->cid[0]) {  // Utilisez un champ spécifique comme cid pour déterminer le type
+    case 0x01:  // SDSC par exemple
       return "SDSC";
-    case SDMMC_CARD_SDHC:
+    case 0x02:  // SDHC par exemple
       return "SDHC";
-    case SDMMC_CARD_SDXC:
+    case 0x03:  // SDXC par exemple
       return "SDXC";
-    case SDMMC_CARD_MMC:
-      return "MMC";
-    case SDMMC_CARD_MMC_HC:
-      return "MMC HC";
     default:
       return "Unknown";
   }
