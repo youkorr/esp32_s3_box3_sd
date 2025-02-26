@@ -12,7 +12,7 @@ from esphome.const import (
 DEPENDENCIES = ["esp32", "sensor", "text_sensor"]
 CODEOWNERS = ["@votreadressee"]
 
-CONF_SD_BOX_CARD = "sd_box_card"
+CONF_SD_CARD = "sd_card"
 CONF_CLK_PIN = "clk_pin"
 CONF_CMD_PIN = "cmd_pin"
 CONF_DATA0_PIN = "data0_pin"
@@ -25,14 +25,14 @@ CONF_TOTAL_SPACE = "total_space"
 CONF_USED_SPACE = "used_space"
 CONF_FREE_SPACE = "free_space"
 
-sd_box_card_ns = cg.esphome_ns.namespace("sd_box_card")
-SDBoxCard = sd_box_card_ns.class_("SDBoxCard", cg.Component)
+sd_card_ns = cg.esphome_ns.namespace("sd_card")
+SDCard = sd_card_ns.class_("SDCard", cg.Component)
 
 CONFIG_SCHEMA = cv.Schema(
     {
-         cv.Required("sd_box_card"): cv.Schema(  # Remplace CONF_SD_BOX_CARD par "sd_box_card"
+        cv.Required(CONF_SD_CARD): cv.Schema(  # Utilisation correcte de CONF_SD_CARD
             {
-                cv.GenerateID(): cv.declare_id(SDBoxCard),
+                cv.GenerateID(): cv.declare_id(SDCard),
                 cv.Required(CONF_CLK_PIN): cv.gpio_pin,
                 cv.Required(CONF_CMD_PIN): cv.gpio_pin,
                 cv.Required(CONF_DATA0_PIN): cv.gpio_pin,
@@ -50,7 +50,7 @@ CONFIG_SCHEMA = cv.Schema(
 )
 
 async def to_code(config):
-    sd_config = config[CONF_SD_BOX_CARD]
+    sd_config = config[CONF_SD_CARD]
     var = cg.new_Pvariable(sd_config[CONF_ID])
     await cg.register_component(var, sd_config)
 
@@ -85,6 +85,7 @@ async def to_code(config):
 
     cg.add_define("USE_SD_CARD")
     cg.add_build_flag("-DUSE_ESP_IDF")
+
 
 
 
