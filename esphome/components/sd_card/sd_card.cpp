@@ -159,13 +159,22 @@ std::string SDCard::get_card_type_str() {
     
   sdmmc_card_t *card = this->card_;
   
-  // Accéder au type directement avec les structures ESP-IDF
-  uint32_t cid[4];
-  esp_err_t ret = sdmmc_card_get_cid(card, cid);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to read CID");
-    return "Unknown";
+  // Obtenir le type de la carte SD
+  switch (card->card_type) {
+    case SDMMC_CARD_SDSC:
+      return "SDSC";
+    case SDMMC_CARD_SDHC:
+      return "SDHC";
+    case SDMMC_CARD_SDXC:
+      return "SDXC";
+    case SDMMC_CARD_MMC:
+      return "MMC";
+    case SDMMC_CARD_MMC_HC:
+      return "MMC HC";
+    default:
+      return "Unknown";
   }
+}
 
   // Vous pouvez utiliser `cid` pour obtenir des informations sur la carte SD ici
   // Pour une solution simple, afficher juste un texte indiquant le succès de la lecture du CID.
