@@ -94,15 +94,17 @@ std::string SDCard::get_card_type_str() {
   if (this->card_ == nullptr)
     return "Unknown";
 
-  switch (this->card_->ocr & SD_OCR_SDHC_CAP) {
-    case 0:
-      return "SDSC";  // Standard Capacity SD
-    case SD_OCR_SDHC_CAP:
-      return "SDHC/SDXC";  // High Capacity SD
-    default:
-      return "Unknown";
+  uint64_t capacity = (uint64_t)this->card_->csd.capacity * this->card_->csd.sector_size;
+
+  if (capacity <= 2ULL * 1024 * 1024 * 1024) {  // ≤ 2GB → SDSC
+    return "SDSC";
+  } else if (capacity <= 32ULL * 1024 * 1024 * 1024) {  // ≤ 32GB → SDHC
+    return "SDHC";
+  } else {  // > 32GB → SDXC
+    return "SDXC";
   }
 }
+
 
 void SDCard::update_space_info() {
   if (!this->initialized_)
