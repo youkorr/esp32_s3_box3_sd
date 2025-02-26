@@ -9,6 +9,9 @@
 #include "driver/sdspi_host.h"
 #include "sdmmc_cmd.h"
 
+#include <vector>
+#include <functional>
+
 namespace esphome {
 namespace sd_card {
 
@@ -33,6 +36,11 @@ class SDCard : public Component {
   void set_free_space_sensor(sensor::Sensor *free_space) { this->free_space_ = free_space; }
 
   void update_sensors();
+
+  // Ajout d'un callback pour déclencher des actions lors des mises à jour
+  void add_on_update_callback(std::function<void()> callback) {
+    this->update_callbacks_.push_back(callback);
+  }
 
  protected:
   uint8_t clk_pin_{0};
@@ -59,10 +67,14 @@ class SDCard : public Component {
   void unmount_fs();
   std::string get_card_type_str();
   void update_space_info();
+
+  // Liste des callbacks à appeler après une mise à jour
+  std::vector<std::function<void()>> update_callbacks_;
 };
 
 }  // namespace sd_card
 }  // namespace esphome
+
 
 
 
