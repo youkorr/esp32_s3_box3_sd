@@ -30,7 +30,7 @@ SDBoxCard = sd_box_card_ns.class_("SDBoxCard", cg.Component)
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_SD_BOX_CARD): cv.Schema(
+         cv.Required("sd_box_card"): cv.Schema(  # Remplace CONF_SD_BOX_CARD par "sd_box_card"
             {
                 cv.GenerateID(): cv.declare_id(SDBoxCard),
                 cv.Required(CONF_CLK_PIN): cv.gpio_pin,
