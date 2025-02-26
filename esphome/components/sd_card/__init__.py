@@ -7,6 +7,7 @@ from esphome.const import (
     ENTITY_CATEGORY_DIAGNOSTIC,
     STATE_CLASS_MEASUREMENT,
 )
+from esphome import pins  # Ajout de l'importation de 'pins'
 
 DEPENDENCIES = ["esp32", "sensor", "text_sensor"]
 CODEOWNERS = ["@votreadressee"]
@@ -76,6 +77,7 @@ async def to_code(config):
 
     cg.add_define("USE_SD_CARD")
     cg.add_build_flag("-DUSE_ESP_IDF")
+
 
 
 
