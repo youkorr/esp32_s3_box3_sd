@@ -18,17 +18,18 @@ CONF_DATA1_PIN = "data1_pin"
 CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
-CONF_MAX_FREQ_KHZ = "max_freq_khz"  # Ajout d'une option pour la fréquence
+CONF_MAX_FREQ_KHZ = "max_freq_khz"
+CONF_MOUNT_POINT = "mount_point"
 
-sd_mmc_card_component_ns = cg.esphome_ns.namespace("sd_mmc_card")
-SdMmc = sd_mmc_card_component_ns.class_("SdMmc", cg.Component)
+sd_mmc_card_ns = cg.esphome_ns.namespace("sd_mmc_card")
+SdMmcCard = sd_mmc_card_ns.class_("SdMmcCard", cg.Component)
 
 # Actions
-SdMmcWriteFileAction = sd_mmc_card_component_ns.class_("SdMmcWriteFileAction", automation.Action)
-SdMmcAppendFileAction = sd_mmc_card_component_ns.class_("SdMmcAppendFileAction", automation.Action)
-SdMmcCreateDirectoryAction = sd_mmc_card_component_ns.class_("SdMmcCreateDirectoryAction", automation.Action)
-SdMmcRemoveDirectoryAction = sd_mmc_card_component_ns.class_("SdMmcRemoveDirectoryAction", automation.Action)
-SdMmcDeleteFileAction = sd_mmc_card_component_ns.class_("SdMmcDeleteFileAction", automation.Action)
+SdMmcWriteFileAction = sd_mmc_card_ns.class_("SdMmcWriteFileAction", automation.Action)
+SdMmcAppendFileAction = sd_mmc_card_ns.class_("SdMmcAppendFileAction", automation.Action)
+SdMmcCreateDirectoryAction = sd_mmc_card_ns.class_("SdMmcCreateDirectoryAction", automation.Action)
+SdMmcRemoveDirectoryAction = sd_mmc_card_ns.class_("SdMmcRemoveDirectoryAction", automation.Action)
+SdMmcDeleteFileAction = sd_mmc_card_ns.class_("SdMmcDeleteFileAction", automation.Action)
 
 def validate_raw_data(value):
     if isinstance(value, str):
@@ -41,7 +42,7 @@ def validate_raw_data(value):
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.declare_id(SdMmc),
+        cv.GenerateID(): cv.declare_id(SdMmcCard),
         cv.Required(CONF_CLK_PIN): pins.internal_gpio_output_pin_number,
         cv.Required(CONF_CMD_PIN): pins.internal_gpio_output_pin_number,
         cv.Required(CONF_DATA0_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
@@ -49,7 +50,8 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
-        cv.Optional(CONF_MAX_FREQ_KHZ, default=20000): cv.int_range(min=400, max=20000),  # Fréquence en kHz
+        cv.Optional(CONF_MAX_FREQ_KHZ, default=20000): cv.int_range(min=400, max=20000),
+        cv.Optional(CONF_MOUNT_POINT, default="/sdcard"): cv.string,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -58,7 +60,8 @@ async def to_code(config):
     await cg.register_component(var, config)
 
     cg.add(var.set_mode_1bit(config[CONF_MODE_1BIT]))
-    cg.add(var.set_max_freq_khz(config[CONF_MAX_FREQ_KHZ]))  # Définir la fréquence
+    cg.add(var.set_max_freq_khz(config[CONF_MAX_FREQ_KHZ]))
+    cg.add(var.set_mount_point(config[CONF_MOUNT_POINT]))
 
     cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
     cg.add(var.set_cmd_pin(config[CONF_CMD_PIN]))
@@ -74,16 +77,41 @@ async def to_code(config):
             cg.add_library("FS", None)
             cg.add_library("SD_MMC", None)
 
+    # Ajout du code pour monter la carte SD
+    cg.add_define("USE_SD_MMC")
+    cg.add(
+        f"""
+        esp_vfs_fat_sdmmc_mount_config_t mount_config = {{
+            .format_if_mount_failed = false,
+            .max_files = 5,
+            .allocation_unit_size = 16 * 1024
+        }};
+        sdmmc_card_t *card;
+        esp_err_t ret = esp_vfs_fat_sdmmc_mount(
+            {config[CONF_MOUNT_POINT]},
+            &host,
+            &slot_config,
+            &mount_config,
+            &card
+        );
+        if (ret != ESP_OK) {{
+            ESP_LOGE("SD_MMC", "Failed to mount SD card: %s", esp_err_to_name(ret));
+            return;
+        }}
+        ESP_LOGI("SD_MMC", "SD card mounted at %s", {config[CONF_MOUNT_POINT]});
+        """
+    )
+
 SD_MMC_PATH_ACTION_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.use_id(SdMmc),
+        cv.GenerateID(): cv.use_id(SdMmcCard),
         cv.Required(CONF_PATH): cv.templatable(cv.string_strict),
     }
 )
 
 SD_MMC_WRITE_FILE_ACTION_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.use_id(SdMmc),
+        cv.GenerateID(): cv.use_id(SdMmcCard),
         cv.Required(CONF_PATH): cv.templatable(cv.string_strict),
         cv.Required(CONF_DATA): cv.templatable(validate_raw_data),
     }
