@@ -14,9 +14,9 @@ void SDBoxCard::setup() {
   ESP_LOGCONFIG(TAG, "Setting up SD Card (SPI mode)...");
 
   spi_bus_config_t bus_cfg = {
-    .mosi_io_num = mosi_pin_->pin_,
-    .miso_io_num = miso_pin_->pin_,
-    .sclk_io_num = clk_pin_->pin_,
+    .mosi_io_num = static_cast<gpio_num_t>(mosi_pin_->get_pin()),
+    .miso_io_num = static_cast<gpio_num_t>(miso_pin_->get_pin()),
+    .sclk_io_num = static_cast<gpio_num_t>(clk_pin_->get_pin()),
     .quadwp_io_num = -1,
     .quadhd_io_num = -1,
     .max_transfer_sz = 4000,
@@ -30,7 +30,7 @@ void SDBoxCard::setup() {
 
   sdmmc_host_t host = SDSPI_HOST_DEFAULT();
   sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-  slot_config.gpio_cs = static_cast<gpio_num_t>(cs_pin_->pin_);
+  slot_config.gpio_cs = static_cast<gpio_num_t>(cs_pin_->get_pin());
   slot_config.host_id = SPI3_HOST;
 
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -65,6 +65,7 @@ void SDBoxCard::dump_config() {
 
 }  // namespace sd_box_card
 }  // namespace esphome
+
 
 
 
