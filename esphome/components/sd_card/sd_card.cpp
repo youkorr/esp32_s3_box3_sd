@@ -159,9 +159,9 @@ std::string SDCard::get_card_type_str() {
     return "Unknown";
     
   sdmmc_card_t *card = this->card_;
-  uint32_t type = sdmmc_card_get_type(card);  // Obtenir le type de la carte
-
-  switch (type) {
+  sdmmc_card_type_t card_type = sdmmc_card_get_type(card);  // Obtenir le type de carte
+  
+  switch (card_type) {
     case SDMMC_CARD_TYPE_SDSC:
       return "SDSC";
     case SDMMC_CARD_TYPE_SDHC:
@@ -213,6 +213,7 @@ void SDCard::update_space_info() {
 
 }  // namespace sd_card
 }  // namespace esphome
+
 
 
 
