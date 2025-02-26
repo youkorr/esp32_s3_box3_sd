@@ -1,41 +1,26 @@
 #pragma once
-#include "esphome/core/component.h"
+
 #include "esphome/core/automation.h"
 #include "sd_card.h"
 
 namespace esphome {
 namespace sd_card {
 
-template<typename... Ts>
-class SDCardUpdateAction : public Action<Ts...> {
+class SDCardUpdateAction : public Action<> {
  public:
   explicit SDCardUpdateAction(SDCard *sd_card) : sd_card_(sd_card) {}
   
-  void play(Ts... x) override {
-    if (this->sd_card_) {
-      this->sd_card_->update_sensors();
-    }
-  }
+  void play(Ts...) override { this->sd_card_->update_sensors(); }
   
  protected:
   SDCard *sd_card_;
 };
 
-class SDCardUpdateTrigger : public PollingComponent, public Trigger<> {
+template<typename... Ts> class SDCardUpdateTrigger : public Trigger<Ts...> {
  public:
-  explicit SDCardUpdateTrigger(SDCard *sd_card) : sd_card_(sd_card) {}
-  
-  void update() override {
-    if (this->sd_card_) {
-      this->sd_card_->update_sensors();
-      this->trigger();
-    }
+  explicit SDCardUpdateTrigger(SDCard *sd_card) {
+    sd_card->add_on_update_callback([this]() { this->trigger(); });
   }
-  
-  float get_setup_priority() const override { return setup_priority::DATA; }
-  
- protected:
-  SDCard *sd_card_;
 };
 
 }  // namespace sd_card
