@@ -1,27 +1,24 @@
 #pragma once
 
+#include "esphome/core/component.h"
 #include "esphome/core/automation.h"
 #include "sd_card.h"
 
 namespace esphome {
-namespace sd_card {
+namespace sd_box_card {
 
-class SDCardUpdateAction : public Action<> {
+class SDCardListFilesAction : public Action<> {
  public:
-  explicit SDCardUpdateAction(SDCard *sd_card) : sd_card_(sd_card) {}
-  
-  void play(Ts...) override { this->sd_card_->update_sensors(); }
-  
- protected:
-  SDCard *sd_card_;
-};
+  explicit SDCardListFilesAction(SDBoxCard *card) : card_(card) {}
 
-template<typename... Ts> class SDCardUpdateTrigger : public Trigger<Ts...> {
- public:
-  explicit SDCardUpdateTrigger(SDCard *sd_card) {
-    sd_card->add_on_update_callback([this]() { this->trigger(); });
+  void play(Ts... x) override {
+    // Implement file listing logic here
   }
+
+ protected:
+  SDBoxCard *card_;
 };
 
-}  // namespace sd_card
+}  // namespace sd_box_card
 }  // namespace esphome
+
