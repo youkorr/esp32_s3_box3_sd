@@ -23,15 +23,22 @@ class SDCardUpdateAction : public Action {
 class SDCardUpdateTrigger : public Trigger<> {
  public:
   explicit SDCardUpdateTrigger(SDCard *sd_card) {
-    if (sd_card) {
-      // Assurez-vous que la méthode add_on_update_callback existe
-      // sinon vous devrez gérer la mise à jour autrement
-      // sd_card->add_on_update_callback([this]() { this->trigger(); });
+    // Utilisation d'un intervalle pour appeler la mise à jour
+    this->interval(1000);  // Vérifie toutes les 1000 ms
+  }
+
+  void update() override {
+    if (this->sd_card_) {
+      this->sd_card_->update_sensors();  // Actualise les capteurs
     }
   }
+
+ protected:
+  SDCard *sd_card_;
 };
 
 }  // namespace sd_card
 }  // namespace esphome
+
 
 
