@@ -159,16 +159,15 @@ std::string SDCard::get_card_type_str() {
 
   sdmmc_card_t *card = this->card_;
   
-  // Assurez-vous que card_type est une valeur valide
-  switch (card->cid[0]) {  // Utilisez un champ spécifique comme cid pour déterminer le type
-    case 0x01:  // SDSC par exemple
-      return "SDSC";
-    case 0x02:  // SDHC par exemple
-      return "SDHC";
-    case 0x03:  // SDXC par exemple
-      return "SDXC";
-    default:
-      return "Unknown";
+  // Assurez-vous que card->cid contient les données, puis utilisez un champ spécifique pour déterminer le type
+  if (card->cid[0] == 0x01) {
+    return "SDSC";  // Exemple pour SDSC, utilisez les valeurs qui correspondent à votre configuration
+  } else if (card->cid[0] == 0x02) {
+    return "SDHC";  // Exemple pour SDHC
+  } else if (card->cid[0] == 0x03) {
+    return "SDXC";  // Exemple pour SDXC
+  } else {
+    return "Unknown";
   }
 }
 
