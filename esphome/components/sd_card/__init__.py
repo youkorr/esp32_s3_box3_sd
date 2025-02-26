@@ -31,12 +31,12 @@ SDCard = sd_card_ns.class_("SDCard", cg.Component)
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(SDCard),
-        cv.Required(CONF_CLK_PIN): cv.gpio_pin,
-        cv.Required(CONF_CMD_PIN): cv.gpio_pin,
-        cv.Required(CONF_DATA0_PIN): cv.gpio_pin,
-        cv.Optional(CONF_DATA1_PIN): cv.gpio_pin,
-        cv.Optional(CONF_DATA2_PIN): cv.gpio_pin,
-        cv.Optional(CONF_DATA3_PIN): cv.gpio_pin,
+        cv.Required(CONF_CLK_PIN): cv.pin,  # Utilisation de cv.pin ici
+        cv.Required(CONF_CMD_PIN): cv.pin,  # Utilisation de cv.pin ici
+        cv.Required(CONF_DATA0_PIN): cv.pin,  # Utilisation de cv.pin ici
+        cv.Optional(CONF_DATA1_PIN): cv.pin,  # Utilisation de cv.pin ici
+        cv.Optional(CONF_DATA2_PIN): cv.pin,  # Utilisation de cv.pin ici
+        cv.Optional(CONF_DATA3_PIN): cv.pin,  # Utilisation de cv.pin ici
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
@@ -77,6 +77,7 @@ async def to_code(config):
 
     cg.add_define("USE_SD_CARD")
     cg.add_build_flag("-DUSE_ESP_IDF")
+
 
 
 
