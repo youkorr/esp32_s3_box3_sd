@@ -29,24 +29,16 @@ SDCard = sd_card_ns.class_("SDCard", cg.Component)
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_SD_CARD): cv.Schema(  # Utilisation correcte de CONF_SD_CARD
-            {
-                cv.GenerateID(): cv.declare_id(SDCard),
-                cv.Required(CONF_CLK_PIN): cv.gpio_pin,
-                cv.Required(CONF_CMD_PIN): cv.gpio_pin,
-                cv.Required(CONF_DATA0_PIN): cv.gpio_pin,
-                cv.Optional(CONF_DATA1_PIN): cv.gpio_pin,
-                cv.Optional(CONF_DATA2_PIN): cv.gpio_pin,
-                cv.Optional(CONF_DATA3_PIN): cv.gpio_pin,
-                cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
-                cv.Optional(CONF_CARD_TYPE): cv.use_id(text_sensor.TextSensor),
-                cv.Optional(CONF_TOTAL_SPACE): cv.use_id(sensor.Sensor),
-                cv.Optional(CONF_USED_SPACE): cv.use_id(sensor.Sensor),
-                cv.Optional(CONF_FREE_SPACE): cv.use_id(sensor.Sensor),
-            }
-        )
+        cv.GenerateID(): cv.declare_id(SdMmc),
+        cv.Required(CONF_CLK_PIN): pins.internal_gpio_output_pin_number,
+        cv.Required(CONF_CMD_PIN): pins.internal_gpio_output_pin_number,
+        cv.Required(CONF_DATA0_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
+        cv.Optional(CONF_DATA1_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
+        cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
+        cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
+        cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
     }
-)
+).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
     sd_config = config[CONF_SD_CARD]
