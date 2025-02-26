@@ -13,7 +13,7 @@ from . import (
     CONF_PATH,
 )
 
-DEPENDENCIES = ["sd_card"]
+DEPENDENCIES = ["sd_mmc_card"]
 
 CONF_USED_SPACE = "used_space"
 CONF_TOTAL_SPACE = "total_space"
