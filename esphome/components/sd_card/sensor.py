@@ -5,50 +5,48 @@ from esphome.const import (
     DEVICE_CLASS_DATA_SIZE,
     ENTITY_CATEGORY_DIAGNOSTIC,
     STATE_CLASS_MEASUREMENT,
-    UNIT_GIGABYTE,
+    UNIT_BYTE,
+    ICON_SD_CARD,
+    CONF_TYPE,
 )
-from . import CONF_SD_BOX_CARD, CONF_FREE_SPACE, CONF_TOTAL_SPACE, CONF_USED_SPACE
 
 DEPENDENCIES = ["sd_card"]
 
-CONFIG_SCHEMA = cv.Schema(
+CONF_SD_CARD_ID = "sd_card_id"
+CONF_TOTAL_SPACE = "total_space"
+CONF_USED_SPACE = "used_space"
+CONF_FREE_SPACE = "free_space"
+
+TYPES = [CONF_TOTAL_SPACE, CONF_USED_SPACE, CONF_FREE_SPACE]
+
+sd_card_ns = cg.esphome_ns.namespace("sd_card")
+SDCard = sd_card_ns.class_("SDCard", cg.Component)
+
+BASE_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_BYTE,
+    icon=ICON_SD_CARD,
+    accuracy_decimals=2,
+    device_class=DEVICE_CLASS_DATA_SIZE,
+    state_class=STATE_CLASS_MEASUREMENT,
+    entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+).extend({
+    cv.GenerateID(CONF_SD_CARD_ID): cv.use_id(SDCard),
+})
+
+CONFIG_SCHEMA = cv.typed_schema(
     {
-        cv.GenerateID(CONF_SD_BOX_CARD): cv.use_id(cg.Component),
-        cv.Optional(CONF_TOTAL_SPACE): sensor.sensor_schema(
-            unit_of_measurement=UNIT_GIGABYTE,
-            accuracy_decimals=2,
-            device_class=DEVICE_CLASS_DATA_SIZE,
-            state_class=STATE_CLASS_MEASUREMENT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-        cv.Optional(CONF_USED_SPACE): sensor.sensor_schema(
-            unit_of_measurement=UNIT_GIGABYTE,
-            accuracy_decimals=2,
-            device_class=DEVICE_CLASS_DATA_SIZE,
-            state_class=STATE_CLASS_MEASUREMENT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-        cv.Optional(CONF_FREE_SPACE): sensor.sensor_schema(
-            unit_of_measurement=UNIT_GIGABYTE,
-            accuracy_decimals=2,
-            device_class=DEVICE_CLASS_DATA_SIZE,
-            state_class=STATE_CLASS_MEASUREMENT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-    }
+        CONF_TOTAL_SPACE: BASE_SCHEMA,
+        CONF_USED_SPACE: BASE_SCHEMA,
+        CONF_FREE_SPACE: BASE_SCHEMA,
+    },
+    lower=True,
 )
 
 async def to_code(config):
-    sd_card = await cg.get_variable(config[CONF_SD_BOX_CARD])
-    
-    if CONF_TOTAL_SPACE in config:
-        sens = await sensor.new_sensor(config[CONF_TOTAL_SPACE])
-        cg.add(sd_card.set_total_space_sensor(sens))
-    
-    if CONF_USED_SPACE in config:
-        sens = await sensor.new_sensor(config[CONF_USED_SPACE])
-        cg.add(sd_card.set_used_space_sensor(sens))
-    
-    if CONF_FREE_SPACE in config:
+    sd_card = await cg.get_variable(config[CONF_SD_CARD_ID])
+    var = await sensor.new_sensor(config)
+    func = getattr(sd_card, f"set_{config[CONF_TYPE]}_sensor")
+    cg.add(func(var))
+
         sens = await sensor.new_sensor(config[CONF_FREE_SPACE])
         cg.add(sd_card.set_free_space_sensor(sens))
