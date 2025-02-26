@@ -33,14 +33,9 @@ BASE_SCHEMA = sensor.sensor_schema(
     cv.GenerateID(CONF_SD_CARD_ID): cv.use_id(SDCard),
 })
 
-CONFIG_SCHEMA = cv.typed_schema(
-    {
-        CONF_TOTAL_SPACE: BASE_SCHEMA,
-        CONF_USED_SPACE: BASE_SCHEMA,
-        CONF_FREE_SPACE: BASE_SCHEMA,
-    },
-    lower=True,
-)
+CONFIG_SCHEMA = cv.Schema({
+    cv.Required(CONF_TYPE): cv.one_of(*TYPES, lower=True),
+}).extend(BASE_SCHEMA)
 
 async def to_code(config):
     sd_card = await cg.get_variable(config[CONF_SD_CARD_ID])
@@ -48,5 +43,3 @@ async def to_code(config):
     func = getattr(sd_card, f"set_{config[CONF_TYPE]}_sensor")
     cg.add(func(var))
 
-        sens = await sensor.new_sensor(config[CONF_FREE_SPACE])
-        cg.add(sd_card.set_free_space_sensor(sens))
