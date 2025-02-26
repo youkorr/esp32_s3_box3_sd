@@ -1,12 +1,11 @@
 #pragma once
-#include "esphome/core/automation.h"
 #include "esphome/core/component.h"
+#include "esphome/core/automation.h"
 #include "sd_card.h"
 
 namespace esphome {
 namespace sd_card {
 
-// Utilisez les types corrects pour l'action
 template<typename... Ts>
 class SDCardUpdateAction : public Action<Ts...> {
  public:
@@ -22,7 +21,6 @@ class SDCardUpdateAction : public Action<Ts...> {
   SDCard *sd_card_;
 };
 
-// Pour le trigger, héritez de PollingComponent
 class SDCardUpdateTrigger : public PollingComponent, public Trigger<> {
  public:
   explicit SDCardUpdateTrigger(SDCard *sd_card) : sd_card_(sd_card) {}
