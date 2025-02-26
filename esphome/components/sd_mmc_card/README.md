@@ -1,300 +1,87 @@
-# esphome_sd_card
+esphome:
+  name: esp32-s3-box3
+  friendly_name: ESP32-S3-BOX3
 
-
-
-* **mode_1bit** (Optional, bool): specify wether to use 1 or 4 bit lane
-* **clk_pin** : (Required, GPIO): clock pin
-* **cmd_pin** : (Required, GPIO): command pin
-* **data0_pin**: (Required, GPIO): data 0 pin
-* **data1_pin**: (Optional, GPIO): data 1 pin, only use in 4bit mode
-* **data2_pin**: (Optional, GPIO): data 2 pin, only use in 4bit mode
-* **data3_pin**: (Optional, GPIO): data 3 pin, only use in 4bit mode
-
-In case of connecting in 1-bit lane also known as SPI mode you can use table below to "convert" pin naming:
-
-|SPI naming|MMC naming|
-|--|--|
-|MISO|DATA0|
-|CLK/SCK|CLK|
-|MOSI|CMD|
-|SS/CS|DATA3|
-
-### Notes
-
-#### Arduino Framework
-
-This component use the SD_MMC library and share its limitations, for more detail see :
-[SD_MMC](https://github.com/espressif/arduino-esp32/tree/master/libraries/SD_MMC)
-
-4 bit lane does not work with arduino framework version prior to ```2.0.7```, due to an issue in the SD_MMC setPins function.
-The issue as been fix by the pull request [espressif/arduino-esp32/#7646](https://github.com/espressif/arduino-esp32/pull/7646)
-
-
-#### ESP-IDF Framework
-
-By default long file name are not enabled, to change this behaviour ```CONFIG_FATFS_LFN_STACK``` or ```CONFIG_FATFS_LFN_HEAP``` should be set in the framework configuration. See the [Espressif documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/kconfig.html#config-fatfs-long-filenames) for more detail.
-
-```yaml
 esp32:
-  board: esp32dev
+  board: esp32-s3-box3
   framework:
     type: esp-idf
-    sdkconfig_options:
-      CONFIG_FATFS_LFN_STACK: "y"
-```
+    version: latest
 
-## Actions
+# Configuration basique
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
 
-### Write file
+# API et OTA
+api:
+  encryption:
+    key: !secret api_encryption_key
 
-```yaml
-sd_mmc_card.write_file:
-    path: !lambda "/test.txt" 
-    data: !lambda |
-        std::string str("content");
-        return std::vector<uint8_t>(str.begin(), str.end())
-```
+ota:
+  password: !secret ota_password
 
-write a file to the sd card
+# Logger
+logger:
+  level: INFO
 
-* **path** (Templatable, string): absolute path to the path
-* **data** (Templatable, vector<uint8_t>): file content
+# Configuration de la carte SD
+external_components:
+  - source:
+      type: local
+      path: components/sd_card
+    components: [ sd_card ]
 
-### Append file
+sd_box_card:
+  id: sd_card_component
+  clk_pin: GPIO11
+  cmd_pin: GPIO14
+  data0_pin: GPIO9
+  data1_pin: GPIO13
+  data2_pin: GPIO42
+  data3_pin: GPIO12
+  mode_1bit: false
 
-```yaml
-sd_mmc_card.append_file:
-    path: "/test.txt" 
-    data: !lambda |
-        std::string str("new content");
-        return std::vector<uint8_t>(str.begin(), str.end())
-```
-Append content to a file on the sd card
-
-* **path** (Templatable, string): absolute path to the path
-* **data** (Templatable, vector<uint8_t>): file content
-
-### Delete file
-
-```yaml
-sd_mmc_card.delete_file:
-    path: "/test.txt"
-```
-
-Delete a file from the sd card
-
-* **path** (Templatable, string): absolute path to the path
-
-### Create directory
-
-```yaml
-sd_mmc_card.create_directory:
-    path: "/test"
-```
-
-Create a folder on the sd card
-
-* **path** (Templatable, string): absolute path to the path
-
-### Remove directory
-
-Delete a folder form the sd card
-
-```yaml
-sd_mmc_card.remove_directory:
-    path: "/test"
-```
-
-## Sensors
-
-### Used space
-
-```yaml
+# Capteurs pour la carte SD
 sensor:
-  - platform: sd_mmc_card
-    type: used_space
-    name: "SD card used space"
-```
+  - platform: sd_card
+    sd_box_card: sd_card_component
+    total_space:
+      name: "SD Card Total Space"
+    used_space:
+      name: "SD Card Used Space"
+    free_space:
+      name: "SD Card Free Space"
 
-Total used space of the sd card in bytes
-
-* All the [sensor](https://esphome.io/components/sensor/) options
-
-### Total space
-
-```yaml
-sensor:
-  - platform: sd_mmc_card
-    type: total_space
-    name: "SD card total space"
-```
-
-Total capacity of the sd card
-
-* All the [sensor](https://esphome.io/components/sensor/) options
-
-### Free space
-
-```yaml
-sensor:
-  - platform: sd_mmc_card
-    type: free_space
-    name: "SD card free space"
-```
-
-Free capacity of the sd card
-
-* All the [sensor](https://esphome.io/components/sensor/) options
-
-### File size
-
-```yaml
-sensor:
-  - platform: sd_mmc_card
-    type: file_size
-    path: "/test.txt"
-```
-
-Return the size of the given file
-
-* **path** (Required, string): path to the file
-* All the [sensor](https://esphome.io/components/sensor/) options
-
-
-## Text Sensor
-
-```yaml
 text_sensor:
-  - platform: sd_mmc_card
-    sd_card_type:
-      name: "SD card type"
-```
+  - platform: sd_card
+    sd_box_card: sd_card_component
+    card_type:
+      name: "SD Card Type"
 
-sd card type (MMC, SDSC, ...)
+# Exemple de media player pour lire un fichier audio de la carte SD
+media_player:
+  - platform: i2s_audio
+    name: "ESP32 Speaker"
+    dac_type: external
+    i2s_lrclk_pin: GPIO19
+    i2s_bclk_pin: GPIO20
+    i2s_dout_pin: GPIO18
+    media_url: "file:///sdcard/test.flac"
 
-* All the [text sensor](https://esphome.io/components/text_sensor/) options
+# Exemple d'affichage pour montrer une image de la carte SD
+display:
+  - platform: ili9xxx
+    model: ili9342
+    cs_pin: GPIO5
+    dc_pin: GPIO4
+    reset_pin: GPIO8
+    update_interval: 5s
+    lambda: |-
+      it.fill(COLOR_BLACK);
+      it.image(0, 0, id(windy_image));
 
-## Others
-
-### List Directory
-
-```cpp
-std::vector<std::string> list_directory(const char *path, uint8_t depth);
-std::vector<std::string> list_directory(std::string path, uint8_t depth);
-```
-
-* **path** : root directory
-* **depth**: max depth 
-
-Example
-
-```yaml
-- lambda: |
-  for (auto const & file : id(esp_camera_sd_card)->list_directory("/", 1))
-    ESP_LOGE("   ", "File: %s\n", file.c_str());
-```
-
-### List Directory File Info
-
-```cpp
-struct FileInfo {
-  std::string path;
-  size_t size;
-  bool is_directory;
-
-  FileInfo(std::string const &, size_t, bool);
-};
-
-std::vector<FileInfo> list_directory_file_info(const char *path, uint8_t depth);
-std::vector<FileInfo> list_directory_file_info(std::string path, uint8_t depth);
-```
-
-* **path** : root directory
-* **depth**: max depth 
-
-Example
-
-```yaml
-- lambda: |
-  for (auto const & file : id(sd_mmc_card)->list_directory_file_info("/", 1))
-    ESP_LOGE("   ", "File: %s, size: %d\n", file.path.c_str(), file.size);
-```
-
-### Is Directory
-
-```cpp
-bool is_directory(const char *path);
-bool is_directory(std::string const &path);
-```
-
-* **path**: directory to test path
-
-Example
-
-```yaml
-- lambda: return id(sd_mmc_card)->is_directory("/folder");
-```
-
-### File Size
-
-```cpp
-size_t file_size(const char *path);
-size_t file_size(std::string const &path);
-```
-
-* **path**: file path
-
-Example
-
-```yaml
-- lambda: return id(sd_mmc_card)->file_size("/file");
-```
-
-### Read File
-
-```cpp
-std::vector<uint8_t> read_file(char const *path);
-std::vector<uint8_t> read_file(std::string const &path);
-```
-
-Return the whole file as a vector, trying to read large file will saturate the esp memory
-
-* **path**: file path
-
-Example
-
-```yaml
-- lambda: return id(sd_mmc_card)->read_file("/file");
-```
-
-## Helpers
-
-### Convert Bytes
-
-```cpp
-enum MemoryUnits : short {
-    Byte = 0,
-    KiloByte = 1,
-    MegaByte = 2,
-    GigaByte = 3,
-    TeraByte = 4,
-    PetaByte = 5
-};
-
-long double convertBytes(uint64_t, MemoryUnits);
-```
-
-convert a value in byte to an other memory unit
-
-Example:
-
-```yaml
-sensor:
-    - platform: sd_mmc_card
-        type: file_size
-        name: "text.txt size"
-        unit_of_measurement: Kb
-        path: "/test.txt"
-        filters:
-        - lambda: return sd_mmc_card::convertBytes(x, sd_mmc_card::MemoryUnits::KiloByte);
-```
+image:
+  - file: 'file:///sdcard/windy_variant3.png'
+    id: windy_image
+    resize: 320x240
