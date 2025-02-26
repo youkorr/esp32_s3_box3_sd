@@ -1,62 +1,68 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import sensor, text_sensor
 from esphome.const import (
     CONF_ID,
-    DEVICE_CLASS_DATA_SIZE,
-    ENTITY_CATEGORY_DIAGNOSTIC,
-    STATE_CLASS_MEASUREMENT,
+    CONF_CLK_PIN,
+    CONF_CMD_PIN,
+    CONF_DATA0_PIN,
+    CONF_DATA1_PIN,
+    CONF_DATA2_PIN,
+    CONF_DATA3_PIN,
+    CONF_MODE_1BIT
 )
+from esphome.components import automation
+from esphome.core import CORE
+from esphome.pins import gpio_pin
 
-DEPENDENCIES = ["esp32", "sensor", "text_sensor"]
-CODEOWNERS = ["@votreadressee"]
+# Nom de l'espace de noms pour l'élément sd_card
+sd_card_component_ns = cg.esphome_ns.namespace("sd_card")
+SDCard = sd_card_component_ns.class_("SDCard", cg.Component)
 
-CONF_SD_CARD = "sd_card"
-CONF_CLK_PIN = "clk_pin"
-CONF_CMD_PIN = "cmd_pin"
-CONF_DATA0_PIN = "data0_pin"
-CONF_DATA1_PIN = "data1_pin"
-CONF_DATA2_PIN = "data2_pin"
-CONF_DATA3_PIN = "data3_pin"
-CONF_MODE_1BIT = "mode_1bit"
-CONF_CARD_TYPE = "card_type"
-CONF_TOTAL_SPACE = "total_space"
-CONF_USED_SPACE = "used_space"
-CONF_FREE_SPACE = "free_space"
+# Action pour les fichiers SD
+SdCardWriteFileAction = sd_card_component_ns.class_("SdCardWriteFileAction", automation.Action)
+SdCardAppendFileAction = sd_card_component_ns.class_("SdCardAppendFileAction", automation.Action)
+SdCardCreateDirectoryAction = sd_card_component_ns.class_("SdCardCreateDirectoryAction", automation.Action)
+SdCardRemoveDirectoryAction = sd_card_component_ns.class_("SdCardRemoveDirectoryAction", automation.Action)
+SdCardDeleteFileAction = sd_card_component_ns.class_("SdCardDeleteFileAction", automation.Action)
 
-sd_card_ns = cg.esphome_ns.namespace("sd_card")
-SDCard = sd_card_ns.class_("SDCard", cg.Component)
+def validate_raw_data(value):
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    if isinstance(value, list):
+        return cv.Schema([cv.hex_uint8_t])(value)
+    raise cv.Invalid(
+        "data must either be a string wrapped in quotes or a list of bytes"
+    )
 
+# Schema de configuration
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(SDCard),
-        cv.Required(CONF_CLK_PIN): cv.gpio_pin,  # Utilisation de cv.gpio_pin ici
-        cv.Required(CONF_CMD_PIN): cv.gpio_pin,  # Utilisation de cv.gpio_pin ici
-        cv.Required(CONF_DATA0_PIN): cv.gpio_pin,  # Utilisation de cv.gpio_pin ici
-        cv.Optional(CONF_DATA1_PIN): cv.gpio_pin,  # Utilisation de cv.gpio_pin ici
-        cv.Optional(CONF_DATA2_PIN): cv.gpio_pin,  # Utilisation de cv.gpio_pin ici
-        cv.Optional(CONF_DATA3_PIN): cv.gpio_pin,  # Utilisation de cv.gpio_pin ici
+        cv.Required(CONF_CLK_PIN): gpio_pin,
+        cv.Required(CONF_CMD_PIN): gpio_pin,
+        cv.Required(CONF_DATA0_PIN): gpio_pin,
+        cv.Optional(CONF_DATA1_PIN): gpio_pin,
+        cv.Optional(CONF_DATA2_PIN): gpio_pin,
+        cv.Optional(CONF_DATA3_PIN): gpio_pin,
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
-    sd_config = config[CONF_SD_CARD]
-    var = cg.new_Pvariable(sd_config[CONF_ID])
-    await cg.register_component(var, sd_config)
+    var = cg.new_Pvariable(config[CONF_ID])
+    await cg.register_component(var, config)
 
-    cg.add(var.set_clk_pin(sd_config[CONF_CLK_PIN]))
-    cg.add(var.set_cmd_pin(sd_config[CONF_CMD_PIN]))
-    cg.add(var.set_data0_pin(sd_config[CONF_DATA0_PIN]))
+    # Ajouter les pins au code
+    cg.add(var.set_mode_1bit(config[CONF_MODE_1BIT]))
+    cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
+    cg.add(var.set_cmd_pin(config[CONF_CMD_PIN]))
+    cg.add(var.set_data0_pin(config[CONF_DATA0_PIN]))
 
-    if CONF_DATA1_PIN in sd_config:
-        cg.add(var.set_data1_pin(sd_config[CONF_DATA1_PIN]))
-    if CONF_DATA2_PIN in sd_config:
-        cg.add(var.set_data2_pin(sd_config[CONF_DATA2_PIN]))
-    if CONF_DATA3_PIN in sd_config:
-        cg.add(var.set_data3_pin(sd_config[CONF_DATA3_PIN]))
-
-    cg.add(var.set_mode_1bit(sd_config[CONF_MODE_1BIT]))
+    # Si le mode 1bit est activé, ajouter les pins de données supplémentaires
+    if not config[CONF_MODE_1BIT]:
+        cg.add(var.set_data1_pin(config[CONF_DATA1_PIN]))
+        cg.add(var.set_data2_pin(config[CONF_DATA2_PIN]))
+        cg.add(var.set_data3_pin(config[CONF_DATA3_PIN]))
 
     if CONF_CARD_TYPE in sd_config:
         ct_sens = await cg.get_variable(sd_config[CONF_CARD_TYPE])
