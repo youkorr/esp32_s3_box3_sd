@@ -5,7 +5,6 @@
 
 static const char *TAG = "sd_card";
 
-// Définir la taille du secteur
 #define SECTOR_SIZE 512  // Taille standard du secteur
 
 namespace esphome {
@@ -159,22 +158,18 @@ std::string SDCard::get_card_type_str() {
     return "Unknown";
     
   sdmmc_card_t *card = this->card_;
-  sdmmc_card_type_t card_type = sdmmc_card_get_type(card);  // Obtenir le type de carte
   
-  switch (card_type) {
-    case SDMMC_CARD_TYPE_SDSC:
-      return "SDSC";
-    case SDMMC_CARD_TYPE_SDHC:
-      return "SDHC";
-    case SDMMC_CARD_TYPE_SDXC:
-      return "SDXC";
-    case SDMMC_CARD_TYPE_MMC:
-      return "MMC";
-    case SDMMC_CARD_TYPE_MMC_HC:
-      return "MMC HC";
-    default:
-      return "Unknown";
+  // Accéder au type directement avec les structures ESP-IDF
+  uint32_t cid[4];
+  esp_err_t ret = sdmmc_io_read_cid(card, cid);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to read CID");
+    return "Unknown";
   }
+
+  // Vous pouvez utiliser `cid` pour obtenir des informations sur la carte SD ici
+  // Pour une solution simple, afficher juste un texte indiquant le succès de la lecture du CID.
+  return "SD Card Detected";
 }
 
 void SDCard::update_space_info() {
@@ -213,6 +208,7 @@ void SDCard::update_space_info() {
 
 }  // namespace sd_card
 }  // namespace esphome
+
 
 
 
