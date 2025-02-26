@@ -12,7 +12,7 @@ from esphome.const import (
 from esphome.core import CORE
 
 # Définir les constantes pour les pins
-CONF_SD_MMC_CARD_ID = "sd_mmc_card_id"
+CONF_SD_CARD_ID = "sd_card_id"
 CONF_CMD_PIN = "cmd_pin"
 CONF_DATA0_PIN = "data0_pin"
 CONF_DATA1_PIN = "data1_pin"
@@ -20,15 +20,20 @@ CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
 
-sd_card_component_ns = cg.esphome_ns.namespace("sd_card")
-SdCard = sd_card_component_ns.class_("SdCard", cg.Component)
+sd_card_ns = cg.esphome_ns.namespace("sd_card")
+SDCard = sd_card_ns.class_("SDCard", cg.Component)
+
+# Définir les méthodes pour les capteurs d'espace
+SDCard.set_total_space_sensor = lambda self, sensor: cg.add(self.set_total_space_sensor(sensor))
+SDCard.set_used_space_sensor = lambda self, sensor: cg.add(self.set_used_space_sensor(sensor))
+SDCard.set_free_space_sensor = lambda self, sensor: cg.add(self.set_free_space_sensor(sensor))
 
 # Actions
-SdCardWriteFileAction = sd_card_component_ns.class_("SdCardWriteFileAction", automation.Action)
-SdCardAppendFileAction = sd_card_component_ns.class_("SdCardAppendFileAction", automation.Action)
-SdCardCreateDirectoryAction = sd_card_component_ns.class_("SdCardCreateDirectoryAction", automation.Action)
-SdCardRemoveDirectoryAction = sd_card_component_ns.class_("SdCardRemoveDirectoryAction", automation.Action)
-SdCardDeleteFileAction = sd_card_component_ns.class_("SdCardDeleteFileAction", automation.Action)
+SDCardWriteFileAction = sd_card_ns.class_("SDCardWriteFileAction", automation.Action)
+SDCardAppendFileAction = sd_card_ns.class_("SDCardAppendFileAction", automation.Action)
+SDCardCreateDirectoryAction = sd_card_ns.class_("SDCardCreateDirectoryAction", automation.Action)
+SDCardRemoveDirectoryAction = sd_card_ns.class_("SDCardRemoveDirectoryAction", automation.Action)
+SDCardDeleteFileAction = sd_card_ns.class_("SDCardDeleteFileAction", automation.Action)
 
 # Fonction de validation pour les données brutes
 def validate_raw_data(value):
@@ -43,7 +48,7 @@ def validate_raw_data(value):
 # Schéma de configuration pour "sd_card"
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.declare_id(SdCard),
+        cv.GenerateID(): cv.declare_id(SDCard),
         cv.Required(CONF_CLK_PIN): pins.internal_gpio_output_pin_number,
         cv.Required(CONF_CMD_PIN): pins.internal_gpio_output_pin_number,
         cv.Required(CONF_DATA0_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
@@ -78,7 +83,7 @@ async def to_code(config):
 # Schéma d'action pour les chemins de fichiers SD
 SD_CARD_PATH_ACTION_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.use_id(SdCard),
+        cv.GenerateID(): cv.use_id(SDCard),
         cv.Required(CONF_PATH): cv.templatable(cv.string_strict),
     }
 )
@@ -86,7 +91,7 @@ SD_CARD_PATH_ACTION_SCHEMA = cv.Schema(
 # Schéma d'action pour l'écriture dans un fichier SD
 SD_CARD_WRITE_FILE_ACTION_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.use_id(SdCard),
+        cv.GenerateID(): cv.use_id(SDCard),
         cv.Required(CONF_PATH): cv.templatable(cv.string_strict),
         cv.Required(CONF_DATA): cv.templatable(validate_raw_data),
     }
@@ -94,7 +99,7 @@ SD_CARD_WRITE_FILE_ACTION_SCHEMA = cv.Schema(
 
 # Définir l'action d'écriture de fichier SD
 @automation.register_action(
-    "sd_card.write_file", SdCardWriteFileAction, SD_CARD_WRITE_FILE_ACTION_SCHEMA
+    "sd_card.write_file", SDCardWriteFileAction, SD_CARD_WRITE_FILE_ACTION_SCHEMA
 )
 async def sd_card_write_file_to_code(config, action_id, template_arg, args):
     parent = await cg.get_variable(config[CONF_ID])
@@ -107,7 +112,7 @@ async def sd_card_write_file_to_code(config, action_id, template_arg, args):
 
 # Définir l'action d'ajout de fichier SD
 @automation.register_action(
-    "sd_card.append_file", SdCardAppendFileAction, SD_CARD_WRITE_FILE_ACTION_SCHEMA
+    "sd_card.append_file", SDCardAppendFileAction, SD_CARD_WRITE_FILE_ACTION_SCHEMA
 )
 async def sd_card_append_file_to_code(config, action_id, template_arg, args):
     parent = await cg.get_variable(config[CONF_ID])
@@ -120,7 +125,7 @@ async def sd_card_append_file_to_code(config, action_id, template_arg, args):
 
 # Définir l'action pour créer un répertoire SD
 @automation.register_action(
-    "sd_card.create_directory", SdCardCreateDirectoryAction, SD_CARD_PATH_ACTION_SCHEMA
+    "sd_card.create_directory", SDCardCreateDirectoryAction, SD_CARD_PATH_ACTION_SCHEMA
 )
 async def sd_card_create_directory_to_code(config, action_id, template_arg, args):
     parent = await cg.get_variable(config[CONF_ID])
@@ -131,7 +136,7 @@ async def sd_card_create_directory_to_code(config, action_id, template_arg, args
 
 # Définir l'action pour supprimer un répertoire SD
 @automation.register_action(
-    "sd_card.remove_directory", SdCardRemoveDirectoryAction, SD_CARD_PATH_ACTION_SCHEMA
+    "sd_card.remove_directory", SDCardRemoveDirectoryAction, SD_CARD_PATH_ACTION_SCHEMA
 )
 async def sd_card_remove_directory_to_code(config, action_id, template_arg, args):
     parent = await cg.get_variable(config[CONF_ID])
@@ -142,7 +147,7 @@ async def sd_card_remove_directory_to_code(config, action_id, template_arg, args
 
 # Définir l'action pour supprimer un fichier SD
 @automation.register_action(
-    "sd_card.delete_file", SdCardDeleteFileAction, SD_CARD_PATH_ACTION_SCHEMA
+    "sd_card.delete_file", SDCardDeleteFileAction, SD_CARD_PATH_ACTION_SCHEMA
 )
 async def sd_card_delete_file_to_code(config, action_id, template_arg, args):
     parent = await cg.get_variable(config[CONF_ID])
@@ -150,6 +155,7 @@ async def sd_card_delete_file_to_code(config, action_id, template_arg, args):
     path_ = await cg.templatable(config[CONF_PATH], args, cg.std_string)
     cg.add(var.set_path(path_))
     return var
+
 
 
 
