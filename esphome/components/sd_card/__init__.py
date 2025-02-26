@@ -20,7 +20,7 @@ CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
 
-sd_mmc_card_component_ns = cg.esphome_ns.namespace("sd_mmc_card")
+sd_mmc_card_component_ns = cg.esphome_ns.namespace("sd_card")
 SdMmc = sd_mmc_card_component_ns.class_("SdMmc", cg.Component)
 
 # Actions
