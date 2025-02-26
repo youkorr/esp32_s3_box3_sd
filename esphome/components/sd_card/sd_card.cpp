@@ -159,22 +159,15 @@ std::string SDCard::get_card_type_str() {
 
   sdmmc_card_t *card = this->card_;
 
-  // Accéder aux informations du CID pour identifier le type de carte SD
-  const sdmmc_cid_t &cid = card->cid;
-
-  // Exemple d'accès aux membres de la structure CID
-  uint32_t mid = cid.mid;  // Manufacturer ID
-  uint32_t oid = cid.oid;  // OEM/Application ID
-  uint32_t pname = cid.pname[0]; // Product name (exemple d'accès, utilisez selon vos besoins)
-
-  if (mid == 0x01) {
-    return "SDSC";  // Exemple pour SDSC
-  } else if (mid == 0x02) {
-    return "SDHC";  // Exemple pour SDHC
-  } else if (mid == 0x03) {
-    return "SDXC";  // Exemple pour SDXC
-  } else {
-    return "Unknown";
+  // Vérification du type en fonction de la capacité
+  uint32_t capacity = card->csd.capacity;
+  
+  if (capacity <= 2 * 1024 * 1024) {  // SDSC (moins de 2 Go)
+    return "SDSC";
+  } else if (capacity <= 32 * 1024 * 1024) {  // SDHC (4 Go à 32 Go)
+    return "SDHC";
+  } else {  // SDXC (plus de 32 Go)
+    return "SDXC";
   }
 }
 
