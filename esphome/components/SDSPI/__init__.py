@@ -18,11 +18,12 @@ CONF_DATA1_PIN = "data1_pin"
 CONF_DATA2_PIN = "data2_pin"
 CONF_DATA3_PIN = "data3_pin"
 CONF_MODE_1BIT = "mode_1bit"
+CONF_MAX_FREQ_KHZ = "max_freq_khz"  # Ajout d'une option pour la fréquence
 
 sd_mmc_card_component_ns = cg.esphome_ns.namespace("sd_mmc_card")
 SdMmc = sd_mmc_card_component_ns.class_("SdMmc", cg.Component)
 
-# Action
+# Actions
 SdMmcWriteFileAction = sd_mmc_card_component_ns.class_("SdMmcWriteFileAction", automation.Action)
 SdMmcAppendFileAction = sd_mmc_card_component_ns.class_("SdMmcAppendFileAction", automation.Action)
 SdMmcCreateDirectoryAction = sd_mmc_card_component_ns.class_("SdMmcCreateDirectoryAction", automation.Action)
@@ -48,21 +49,22 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
+        cv.Optional(CONF_MAX_FREQ_KHZ, default=20000): cv.int_range(min=400, max=20000),  # Fréquence en kHz
     }
 ).extend(cv.COMPONENT_SCHEMA)
-
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
     cg.add(var.set_mode_1bit(config[CONF_MODE_1BIT]))
+    cg.add(var.set_max_freq_khz(config[CONF_MAX_FREQ_KHZ]))  # Définir la fréquence
 
     cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
     cg.add(var.set_cmd_pin(config[CONF_CMD_PIN]))
     cg.add(var.set_data0_pin(config[CONF_DATA0_PIN]))
 
-    if (config[CONF_MODE_1BIT] == False):
+    if not config[CONF_MODE_1BIT]:
         cg.add(var.set_data1_pin(config[CONF_DATA1_PIN]))
         cg.add(var.set_data2_pin(config[CONF_DATA2_PIN]))
         cg.add(var.set_data3_pin(config[CONF_DATA3_PIN]))
@@ -71,7 +73,6 @@ async def to_code(config):
         if CORE.is_esp32:
             cg.add_library("FS", None)
             cg.add_library("SD_MMC", None)
-
 
 SD_MMC_PATH_ACTION_SCHEMA = cv.Schema(
     {
@@ -100,7 +101,6 @@ async def sd_mmc_write_file_to_code(config, action_id, template_arg, args):
     cg.add(var.set_data(data_))
     return var
 
-
 @automation.register_action(
     "sd_mmc_card.append_file", SdMmcAppendFileAction, SD_MMC_WRITE_FILE_ACTION_SCHEMA
 )
@@ -113,7 +113,6 @@ async def sd_mmc_append_file_to_code(config, action_id, template_arg, args):
     cg.add(var.set_data(data_))
     return var
 
-
 @automation.register_action(
     "sd_mmc_card.create_directory", SdMmcCreateDirectoryAction, SD_MMC_PATH_ACTION_SCHEMA
 )
@@ -124,7 +123,6 @@ async def sd_mmc_create_directory_to_code(config, action_id, template_arg, args)
     cg.add(var.set_path(path_))
     return var
 
-
 @automation.register_action(
     "sd_mmc_card.remove_directory", SdMmcRemoveDirectoryAction, SD_MMC_PATH_ACTION_SCHEMA
 )
@@ -134,7 +132,6 @@ async def sd_mmc_remove_directory_to_code(config, action_id, template_arg, args)
     path_ = await cg.templatable(config[CONF_PATH], args, cg.std_string)
     cg.add(var.set_path(path_))
     return var
-
 
 @automation.register_action(
     "sd_mmc_card.delete_file", SdMmcDeleteFileAction, SD_MMC_PATH_ACTION_SCHEMA
