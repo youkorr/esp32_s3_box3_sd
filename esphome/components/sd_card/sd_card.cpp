@@ -35,72 +35,31 @@ void SDCard::setup() {
     this->card_type_->publish_state(this->get_card_type_str());
   }
 
-  this->update_space_info();
-}
-
-void SDCard::dump_config() {
-  ESP_LOGCONFIG(TAG, "SD Card:");
-  ESP_LOGCONFIG(TAG, "  CLK Pin: %d", this->clk_pin_);
-  ESP_LOGCONFIG(TAG, "  CMD Pin: %d", this->cmd_pin_);
-  ESP_LOGCONFIG(TAG, "  DATA0 Pin: %d", this->data0_pin_);
-
-  if (!this->mode_1bit_) {
-    ESP_LOGCONFIG(TAG, "  DATA1 Pin: %d", this->data1_pin_);
-    ESP_LOGCONFIG(TAG, "  DATA2 Pin: %d", this->data2_pin_);
-    ESP_LOGCONFIG(TAG, "  DATA3 Pin: %d", this->data3_pin_);
-  }
-
-  ESP_LOGCONFIG(TAG, "  Mode: %s", this->mode_1bit_ ? "1-bit" : "4-bit");
-
-  if (this->initialized_) {
-    ESP_LOGCONFIG(TAG, "  Card Type: %s", this->get_card_type_str().c_str());
-    ESP_LOGCONFIG(TAG, "  Mounted at: /sdcard");
-
-    FATFS *fs;
-    DWORD fre_clust;
-    uint64_t total_bytes, free_bytes;
-
-    f_getfree("/sdcard", &fre_clust, &fs);
-
-    total_bytes = ((uint64_t) fs->csize) * SECTOR_SIZE * ((fs->n_fatent - 2));
-    free_bytes = ((uint64_t) fs->csize) * SECTOR_SIZE * fre_clust;
-    uint64_t used_bytes = total_bytes - free_bytes;
-
-    ESP_LOGCONFIG(TAG, "  Total space: %.2f GB", total_bytes / (1024.0 * 1024.0 * 1024.0));
-    ESP_LOGCONFIG(TAG, "  Free space: %.2f GB", free_bytes / (1024.0 * 1024.0 * 1024.0));
-    ESP_LOGCONFIG(TAG, "  Used space: %.2f GB", used_bytes / (1024.0 * 1024.0 * 1024.0));
-  } else {
-    ESP_LOGCONFIG(TAG, "  Initialization failed");
-  }
-}
-
-void SDCard::loop() {
-  if (!this->initialized_)
-    return;
-
-  const uint32_t now = millis();
-  if (now - this->last_update_ < 60000)  // Update every minute
-    return;
-
-  this->last_update_ = now;
   this->update_sensors();
 }
 
 void SDCard::update_sensors() {
+  if (!this->initialized_)
+    return;
+
   if (this->card_type_ != nullptr) {
     this->card_type_->publish_state(this->get_card_type_str());
   }
 
   this->update_space_info();
+
+  // Appeler les callbacks d'événements
+  for (const auto &callback : this->update_callbacks_) {
+    callback();
+  }
 }
 
 esp_err_t SDCard::init_sdmmc() {
   ESP_LOGD(TAG, "Initializing SDMMC");
 
   sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-
-  // Configurer les broches pour SDMMC
   sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+
   slot_config.clk = static_cast<gpio_num_t>(this->clk_pin_);
   slot_config.cmd = static_cast<gpio_num_t>(this->cmd_pin_);
   slot_config.d0 = static_cast<gpio_num_t>(this->data0_pin_);
@@ -114,7 +73,6 @@ esp_err_t SDCard::init_sdmmc() {
     slot_config.width = 1;
   }
 
-  // Options pour l'initialisation de la carte SD
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
       .format_if_mount_failed = false,
       .max_files = 5,
@@ -125,54 +83,29 @@ esp_err_t SDCard::init_sdmmc() {
   esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &this->card_);
 
   if (ret != ESP_OK) {
-    if (ret == ESP_FAIL) {
-      ESP_LOGE(TAG, "Failed to mount filesystem");
-    } else {
-      ESP_LOGE(TAG, "Failed to initialize SD card");
-    }
+    ESP_LOGE(TAG, "SD card initialization failed");
     return ret;
   }
 
   return ESP_OK;
 }
 
-esp_err_t SDCard::mount_fs() {
-  if (this->card_ == nullptr) {
-    return ESP_FAIL;
-  }
-
-  ESP_LOGD(TAG, "SD card mounted successfully");
-  return ESP_OK;
-}
-
-void SDCard::unmount_fs() {
-  if (this->card_ != nullptr) {
-    esp_vfs_fat_sdcard_unmount("/sdcard", this->card_);
-    this->card_ = nullptr;
-    ESP_LOGD(TAG, "Card unmounted");
-  }
-}
-
 std::string SDCard::get_card_type_str() {
   if (this->card_ == nullptr)
     return "Unknown";
 
-  sdmmc_card_t *card = this->card_;
-
-  // Vérification du type en fonction de la capacité
-  uint32_t capacity = card->csd.capacity;
-  
-  if (capacity <= 2 * 1024 * 1024) {  // SDSC (moins de 2 Go)
-    return "SDSC";
-  } else if (capacity <= 32 * 1024 * 1024) {  // SDHC (4 Go à 32 Go)
-    return "SDHC";
-  } else {  // SDXC (plus de 32 Go)
-    return "SDXC";
+  switch (this->card_->ocr & SD_OCR_SDHC_CAP) {
+    case 0:
+      return "SDSC";  // Standard Capacity SD
+    case SD_OCR_SDHC_CAP:
+      return "SDHC/SDXC";  // High Capacity SD
+    default:
+      return "Unknown";
   }
 }
 
 void SDCard::update_space_info() {
-  if (!this->initialized_ || (this->total_space_ == nullptr && this->free_space_ == nullptr && this->used_space_ == nullptr))
+  if (!this->initialized_)
     return;
 
   FATFS *fs;
@@ -184,7 +117,7 @@ void SDCard::update_space_info() {
     return;
   }
 
-  uint64_t total_bytes = ((uint64_t) fs->csize) * SECTOR_SIZE * ((fs->n_fatent - 2));
+  uint64_t total_bytes = ((uint64_t) fs->csize) * SECTOR_SIZE * (fs->n_fatent - 2);
   uint64_t free_bytes = ((uint64_t) fs->csize) * SECTOR_SIZE * fre_clust;
   uint64_t used_bytes = total_bytes - free_bytes;
 
@@ -207,6 +140,7 @@ void SDCard::update_space_info() {
 
 }  // namespace sd_card
 }  // namespace esphome
+
 
 
 
