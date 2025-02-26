@@ -1,63 +1,131 @@
-#include "sd_card.h"
+#include "sd_mmc_card.h"
+
+#include <algorithm>
+
+#include "math.h"
 #include "esphome/core/log.h"
 
 namespace esphome {
-namespace sd_box_card {
+namespace sd_mmc_card {
 
-static const char *TAG = "sd_box_card";
+static const char *TAG = "sd_mmc_card";
 
-void SDBoxCard::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up SD Card...");
+#ifdef USE_SENSOR
+FileSizeSensor::FileSizeSensor(sensor::Sensor *sensor, std::string const &path) : sensor(sensor), path(path) {}
+#endif
 
-  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-  sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+void SdMmc::loop() {}
 
-  slot_config.width = mode_1bit_ ? 1 : 4;
-  slot_config.clk = clk_pin_->get_pin();
-  slot_config.cmd = cmd_pin_->get_pin();
-  slot_config.d0 = data0_pin_->get_pin();
-  if (!mode_1bit_) {
-    slot_config.d1 = data1_pin_->get_pin();
-    slot_config.d2 = data2_pin_->get_pin();
-    slot_config.d3 = data3_pin_->get_pin();
+void SdMmc::dump_config() {
+  ESP_LOGCONFIG(TAG, "SD MMC Component");
+  ESP_LOGCONFIG(TAG, "  Mode 1 bit: %s", TRUEFALSE(this->mode_1bit_));
+  ESP_LOGCONFIG(TAG, "  CLK Pin: %d", this->clk_pin_);
+  ESP_LOGCONFIG(TAG, "  CMD Pin: %d", this->cmd_pin_);
+  ESP_LOGCONFIG(TAG, "  DATA0 Pin: %d", this->data0_pin_);
+  if (!this->mode_1bit_) {
+    ESP_LOGCONFIG(TAG, "  DATA1 Pin: %d", this->data1_pin_);
+    ESP_LOGCONFIG(TAG, "  DATA2 Pin: %d", this->data2_pin_);
+    ESP_LOGCONFIG(TAG, "  DATA3 Pin: %d", this->data3_pin_);
   }
+#ifdef USE_SENSOR
+  LOG_SENSOR("  ", "Used space", this->used_space_sensor_);
+  LOG_SENSOR("  ", "Total space", this->total_space_sensor_);
+  LOG_SENSOR("  ", "Free space", this->free_space_sensor_);
+  for (auto &sensor : this->file_size_sensors_) {
+    if (sensor.sensor != nullptr)
+      LOG_SENSOR("  ", "File size", sensor.sensor);
+  }
+#endif
+#ifdef USE_TEXT_SENSOR
+  LOG_TEXT_SENSOR("  ", "SD Card Type", this->sd_card_type_text_sensor_);
+#endif
 
-  esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-      .format_if_mount_failed = false,
-      .max_files = 5,
-      .allocation_unit_size = 16 * 1024
-  };
-
-  esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card_);
-
-  if (ret != ESP_OK) {
-    if (ret == ESP_FAIL) {
-      ESP_LOGE(TAG, "Failed to mount filesystem.");
-    } else {
-      ESP_LOGE(TAG, "Failed to initialize the card (%s). "
-               "Make sure SD card lines have pull-up resistors in place.",
-               esp_err_to_name(ret));
-    }
+  if (this->is_failed()) {
+    ESP_LOGE(TAG, "Setup failed : %s", SdMmc::error_code_to_string(this->init_error_).c_str());
     return;
   }
-
-  ESP_LOGI(TAG, "SD Card mounted successfully");
 }
 
-void SDBoxCard::dump_config() {
-  ESP_LOGCONFIG(TAG, "SD Box Card:");
-  LOG_PIN("  CLK Pin: ", this->clk_pin_);
-  LOG_PIN("  CMD Pin: ", this->cmd_pin_);
-  LOG_PIN("  D0 Pin: ", this->data0_pin_);
-  if (!this->mode_1bit_) {
-    LOG_PIN("  D1 Pin: ", this->data1_pin_);
-    LOG_PIN("  D2 Pin: ", this->data2_pin_);
-    LOG_PIN("  D3 Pin: ", this->data3_pin_);
+void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
+  ESP_LOGV(TAG, "Writing to file: %s", path);
+  this->write_file(path, buffer, len, "w");
+}
+
+void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
+  ESP_LOGV(TAG, "Appending to file: %s", path);
+  this->write_file(path, buffer, len, "a");
+}
+
+std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
+  std::vector<std::string> list;
+  std::vector<FileInfo> infos = list_directory_file_info(path, depth);
+  std::transform(infos.cbegin(), infos.cend(), list.begin(), [](FileInfo const &info) { return info.path; });
+  return list;
+}
+
+std::vector<std::string> SdMmc::list_directory(std::string path, uint8_t depth) {
+  return this->list_directory(path.c_str(), depth);
+}
+
+std::vector<FileInfo> SdMmc::list_directory_file_info(const char *path, uint8_t depth) {
+  std::vector<FileInfo> list;
+  list_directory_file_info_rec(path, depth, list);
+  return list;
+}
+
+std::vector<FileInfo> SdMmc::list_directory_file_info(std::string path, uint8_t depth) {
+  return this->list_directory_file_info(path.c_str(), depth);
+}
+
+size_t SdMmc::file_size(std::string const &path) { return this->file_size(path.c_str()); }
+
+bool SdMmc::is_directory(std::string const &path) { return this->is_directory(path.c_str()); }
+
+bool SdMmc::delete_file(std::string const &path) { return this->delete_file(path.c_str()); }
+
+std::vector<uint8_t> SdMmc::read_file(std::string const &path) { return this->read_file(path.c_str()); }
+
+#ifdef USE_SENSOR
+void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
+  this->file_size_sensors_.emplace_back(sensor, path);
+}
+#endif
+
+void SdMmc::set_clk_pin(uint8_t pin) { this->clk_pin_ = pin; }
+
+void SdMmc::set_cmd_pin(uint8_t pin) { this->cmd_pin_ = pin; }
+
+void SdMmc::set_data0_pin(uint8_t pin) { this->data0_pin_ = pin; }
+
+void SdMmc::set_data1_pin(uint8_t pin) { this->data1_pin_ = pin; }
+
+void SdMmc::set_data2_pin(uint8_t pin) { this->data2_pin_ = pin; }
+
+void SdMmc::set_data3_pin(uint8_t pin) { this->data3_pin_ = pin; }
+
+void SdMmc::set_mode_1bit(bool b) { this->mode_1bit_ = b; }
+
+std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
+  switch (code) {
+    case ErrorCode::ERR_PIN_SETUP:
+      return "Failed to set pins";
+    case ErrorCode::ERR_MOUNT:
+      return "Failed to mount card";
+    case ErrorCode::ERR_NO_CARD:
+      return "No card found";
+    default:
+      return "Unknown error";
   }
-  ESP_LOGCONFIG(TAG, "  Mode: %s", this->mode_1bit_ ? "1-bit" : "4-bit");
 }
 
-}  // namespace sd_box_card
+long double convertBytes(uint64_t value, MemoryUnits unit) {
+  return value * 1.0 / pow(1024, static_cast<uint64_t>(unit));
+}
+
+FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
+    : path(path), size(size), is_directory(is_directory) {}
+
+}  // namespace sd_mmc_card
 }  // namespace esphome
 
 
