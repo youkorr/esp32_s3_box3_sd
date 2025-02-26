@@ -159,13 +159,19 @@ std::string SDCard::get_card_type_str() {
 
   sdmmc_card_t *card = this->card_;
 
-  // Assurez-vous que card->cid contient les données, puis utilisez un champ spécifique pour déterminer le type
-  // Accéder à card->cid en utilisant les membres de la structure CID
-  if (card->cid.manufacturer_id == 0x01) {
-    return "SDSC";  // Exemple pour SDSC, utilisez les valeurs qui correspondent à votre configuration
-  } else if (card->cid.manufacturer_id == 0x02) {
+  // Accéder aux informations du CID pour identifier le type de carte SD
+  const sdmmc_cid_t &cid = card->cid;
+
+  // Exemple d'accès aux membres de la structure CID
+  uint32_t mid = cid.mid;  // Manufacturer ID
+  uint32_t oid = cid.oid;  // OEM/Application ID
+  uint32_t pname = cid.pname[0]; // Product name (exemple d'accès, utilisez selon vos besoins)
+
+  if (mid == 0x01) {
+    return "SDSC";  // Exemple pour SDSC
+  } else if (mid == 0x02) {
     return "SDHC";  // Exemple pour SDHC
-  } else if (card->cid.manufacturer_id == 0x03) {
+  } else if (mid == 0x03) {
     return "SDXC";  // Exemple pour SDXC
   } else {
     return "Unknown";
