@@ -13,7 +13,7 @@ from esphome.const import (
 DEPENDENCIES = ["esp32"]
 CODEOWNERS = ["@votreadressee"]
 
-CONF_SD_MMC_CARD_ID = "sd_mmc_card_id"
+CONF_SD_BOX_CARD = "sd_box_card"
 CONF_CMD_PIN = "cmd_pin"
 CONF_DATA0_PIN = "data0_pin"
 CONF_DATA1_PIN = "data1_pin"
@@ -50,7 +50,7 @@ CONFIG_SCHEMA = cv.Schema(
 )
 
 async def to_code(config):
-    sd_config = config[CONF_SD_CARD]
+    sd_config = config[CONF_SD_BOX_CARD]
     var = cg.new_Pvariable(sd_config[CONF_ID])
     await cg.register_component(var, sd_config)
 
