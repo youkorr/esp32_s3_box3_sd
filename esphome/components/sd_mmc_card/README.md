@@ -1,18 +1,6 @@
 # esphome_sd_card
 
-SD MMC cards components for esphome.
 
-# Config
-
-```yaml
-sd_mmc_card:
-  id: sd_box
-  data3_pin: GPIO12
-  cmd_pin: GPIO14
-  data0_pin: GPIO9
-  clk_pin: 11
-  mode_1bit: true
-```
 
 * **mode_1bit** (Optional, bool): specify wether to use 1 or 4 bit lane
 * **clk_pin** : (Required, GPIO): clock pin
