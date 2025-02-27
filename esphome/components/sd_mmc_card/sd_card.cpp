@@ -1,9 +1,9 @@
 #include "sd_mmc_card.h"
 
 #include <algorithm>
-
 #include "math.h"
 #include "esphome/core/log.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 
 namespace esphome {
 namespace sd_mmc_card {
@@ -125,8 +125,20 @@ long double convertBytes(uint64_t value, MemoryUnits unit) {
 FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
     : path(path), size(size), is_directory(is_directory) {}
 
+// ✅ Nouvelle fonction pour définir le fichier audio depuis la SD
+void SdMmc::set_wake_sound_file(std::string const &path) {
+  auto wake_sound = esphome::text_sensor::global_text_sensor_get("wake_sound_file");
+  if (wake_sound != nullptr) {
+    wake_sound->publish_state(path);
+    ESP_LOGD(TAG, "Wake sound file set to: %s", path.c_str());
+  } else {
+    ESP_LOGE(TAG, "Wake sound text sensor not found!");
+  }
+}
+
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
 
 
 
