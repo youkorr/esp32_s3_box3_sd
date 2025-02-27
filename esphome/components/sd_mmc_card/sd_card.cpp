@@ -1,9 +1,9 @@
 #include "sd_mmc_card.h"
 
 #include <algorithm>
+
 #include "math.h"
 #include "esphome/core/log.h"
-#include "esphome/components/text_sensor/text_sensor.h"
 
 namespace esphome {
 namespace sd_mmc_card {
