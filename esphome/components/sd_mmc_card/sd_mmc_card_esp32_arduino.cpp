@@ -8,15 +8,21 @@
 #include "SD_MMC.h"
 #include "FS.h"
 
+#define SDCARD_PWR_CTRL GPIO_NUM_43
+
 namespace esphome {
 namespace sd_mmc_card {
 
 static const char *TAG = "sd_mmc_card_esp32_arduino";
 
 void SdMmc::setup() {
-  bool setPinResult = this->mode_1bit_ ? SD_MMC.setPins(this->clk_pin_, this->cmd_pin_, this->data0_pin_)
-                                       : SD_MMC.setPins(this->clk_pin_, this->cmd_pin_, this->data0_pin_,
-                                                        this->data1_pin_, this->data2_pin_, this->data3_pin_);
+  // Enable SDCard power
+  if (SDCARD_PWR_CTRL >= 0) {
+    gpio_config_t gpio_cfg = {
+      .pin_bit_mask = 1ULL << SDCARD_PWR_CTRL,
+      .mode = GPIO_MODE_OUTPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_P
 
   if (!setPinResult) {
     this->init_error_ = ErrorCode::ERR_PIN_SETUP;
