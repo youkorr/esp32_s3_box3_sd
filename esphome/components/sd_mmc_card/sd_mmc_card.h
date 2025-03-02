@@ -17,6 +17,7 @@ class SDBoxCard : public Component {
   void set_data2_pin(GPIOPin *pin) { data2_pin_ = pin; }
   void set_clk_pin(GPIOPin *pin) { clk_pin_ = pin; }
   void set_mode_1bit(bool mode) { mode_1bit_ = mode; }
+  void set_power_pin(GPIOPin *pin) { power_pin_ = pin; }
 
   void setup() override;
   void dump_config() override;
@@ -29,6 +30,7 @@ class SDBoxCard : public Component {
   GPIOPin *data2_pin_{nullptr};
   GPIOPin *clk_pin_{nullptr};
   bool mode_1bit_{false};
+  GPIOPin *power_pin_{nullptr};
   sdmmc_card_t *card_{nullptr};
 };
 
