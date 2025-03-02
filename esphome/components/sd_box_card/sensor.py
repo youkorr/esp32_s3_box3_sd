@@ -9,7 +9,7 @@ from esphome.const import (
     UNIT_MEGABYTE,
     ICON_CARD_BULK,
 )
-from .. import sd_box_card_ns, SDBoxCard
+
 
 DEPENDENCIES = ["sd_box_card"]
 
