@@ -13,6 +13,10 @@ from esphome.const import (
     ICON_SD,
 )
 
+# If you need a specific SD device class, define it here:
+DEVICE_CLASS_SD = "sd"  # or whatever value you deem appropriate
+
+
 CODEOWNERS = ["@votre_nom"]
 DEPENDENCIES = []
 
