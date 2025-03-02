@@ -2,9 +2,9 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import text_sensor
 from esphome.const import CONF_ID, CONF_SD_CARD_ID, ICON_SD
-from .. import sd_box_card_ns, SDBoxCard
 
-DEPENDENCIES = ["sd_box_card"]
+
+
 
 SDCardInfoTextSensor = sd_box_card_ns.class_(
     "SDCardInfoTextSensor", text_sensor.TextSensor, cg.Component
