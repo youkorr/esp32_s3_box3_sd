@@ -1,6 +1,6 @@
 #pragma once
 #include "esphome/components/sensor/sensor.h"
-#include "sd_card.h"
+
 
 namespace esphome {
 namespace sd_box_card {
