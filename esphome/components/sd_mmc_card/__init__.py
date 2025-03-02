@@ -8,6 +8,7 @@ from esphome.const import (
     CONF_CLK_PIN,
     CONF_INPUT,
     CONF_OUTPUT,
+    CONF_POWER_CTRL_PIN,
 )
 from esphome.core import CORE
 
@@ -48,9 +49,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_DATA2_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_DATA3_PIN): pins.internal_gpio_pin_number({CONF_OUTPUT: True, CONF_INPUT: True}),
         cv.Optional(CONF_MODE_1BIT, default=False): cv.boolean,
+        cv.Optional(CONF_POWER_CTRL_PIN): pins.internal_gpio_output_pin_number,
     }
 ).extend(cv.COMPONENT_SCHEMA)
-
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
@@ -66,6 +67,9 @@ async def to_code(config):
         cg.add(var.set_data1_pin(config[CONF_DATA1_PIN]))
         cg.add(var.set_data2_pin(config[CONF_DATA2_PIN]))
         cg.add(var.set_data3_pin(config[CONF_DATA3_PIN]))
+
+    if CONF_POWER_CTRL_PIN in config:
+        cg.add(var.set_power_ctrl_pin(config[CONF_POWER_CTRL_PIN]))
 
     if CORE.using_arduino:
         if CORE.is_esp32:
