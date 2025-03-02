@@ -8,7 +8,7 @@ from esphome.const import (
     CONF_CLK_PIN,
     CONF_INPUT,
     CONF_OUTPUT,
-    CONF_POWER_CTRL_PIN,
+    
 )
 from esphome.core import CORE
 CONF_POWER_CTRL_PIN = "power_ctrl_pin"
