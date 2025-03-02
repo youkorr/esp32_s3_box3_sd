@@ -1,4 +1,4 @@
-# esphome_sd_card for esp32s3box3
+# sd_card for esp32s3box3
 
 SD MMC cards components for esphome.
 
