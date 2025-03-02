@@ -11,7 +11,7 @@ from esphome.const import (
     CONF_POWER_CTRL_PIN,
 )
 from esphome.core import CORE
-
+CONF_POWER_CTRL_PIN = "power_ctrl_pin"
 CONF_SD_MMC_CARD_ID = "sd_mmc_card_id"
 CONF_CMD_PIN = "cmd_pin"
 CONF_DATA0_PIN = "data0_pin"
