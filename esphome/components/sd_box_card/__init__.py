@@ -4,12 +4,11 @@ from esphome import pins
 from esphome.components import sensor, text_sensor
 from esphome.const import (
     CONF_ID,
-    CONF_DATA_PIN,
+    CONF_DATA,
+    CONF_PATH,
     CONF_CLK_PIN,
-    CONF_MODE,
-    STATE_CLASS_MEASUREMENT,
-    ICON_CARD_BULK,
-    ICON_SD,
+    CONF_INPUT,
+    CONF_OUTPUT,
 )
 
 # If you need a specific SD device class, define it here:
