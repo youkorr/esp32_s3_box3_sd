@@ -1,7 +1,7 @@
 #include "sd_card_sensor.h"
 
 namespace esphome {
-namespace sd_box_card {
+
 
 static const char *TAG = "sd_card.sensor";
 
