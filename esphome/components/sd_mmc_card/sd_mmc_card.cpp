@@ -22,6 +22,7 @@ void SdMmc::dump_config() {
   ESP_LOGCONFIG(TAG, "  CLK Pin: %d", this->clk_pin_);
   ESP_LOGCONFIG(TAG, "  CMD Pin: %d", this->cmd_pin_);
   ESP_LOGCONFIG(TAG, "  DATA0 Pin: %d", this->data0_pin_);
+  LOG_PIN("  Power Pin: ", this->power_pin_);
   if (!this->mode_1bit_) {
     ESP_LOGCONFIG(TAG, "  DATA1 Pin: %d", this->data1_pin_);
     ESP_LOGCONFIG(TAG, "  DATA2 Pin: %d", this->data2_pin_);
