@@ -83,6 +83,7 @@ class SdMmc : public Component {
   void set_data2_pin(uint8_t);
   void set_data3_pin(uint8_t);
   void set_mode_1bit(bool);
+  void set_power_ctrl_pin(uint8_t pin) { this->power_ctrl_pin_ = pin; }
 
  protected:
   ErrorCode init_error_;
@@ -93,6 +94,7 @@ class SdMmc : public Component {
   uint8_t data2_pin_;
   uint8_t data3_pin_;
   bool mode_1bit_;
+  uint8_t power_ctrl_pin_{-1};  // Ajout du membre power_ctrl_pin_
 
 #ifdef USE_ESP_IDF
   sdmmc_card_t *card_;
