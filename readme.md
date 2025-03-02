@@ -32,10 +32,29 @@ Pour les appareils comme l'ESP32-S3-Box-3, vous pouvez utiliser la broche `power
 
 Exemple de configuration pour l'ESP32-S3-Box-3 :
 ```yaml
+esp32:
+  board: esp32s3box
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    version: recommended
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_FATFS_LFN_STACK: "y"
+
+
+
 sd_mmc_card:
-  clk_pin: GPIO14
-  cmd_pin: GPIO15
-  data0_pin: GPIO2
+  id: box3_sd
+  clk_pin: GPIO11
+  cmd_pin: GPIO14
+  data0_pin: GPIO9
+  data1_pin: GPIO13
+  data2_pin: GPIO42
+  data3_pin: GPIO12
+  mode_1bit: false
   power_ctrl_pin: GPIO43  # Active l'alimentation du lecteur de carte SD
 ```
 
