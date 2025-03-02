@@ -1,6 +1,7 @@
 #include "sd_mmc_card.h"
 
 #ifdef USE_ESP_IDF
+
 #include "math.h"
 #include "esphome/core/log.h"
 #include "esp_vfs.h"
@@ -8,6 +9,7 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 #include "driver/sdmmc_types.h"
+#include "driver/gpio.h"
 
 int constexpr SD_OCR_SDHC_CAP = (1 << 30);  // value defined in esp-idf/components/sdmmc/include/sd_protocol_defs.h
 
@@ -21,6 +23,20 @@ static const std::string MOUNT_POINT("/sdcard");
 std::string build_path(const char *path) { return MOUNT_POINT + path; }
 
 void SdMmc::setup() {
+  // Enable SDCard power if power control pin is configured
+  if (this->power_ctrl_pin_ >= 0) {
+    gpio_config_t gpio_cfg = {
+      .pin_bit_mask = 1ULL << this->power_ctrl_pin_,
+      .mode = GPIO_MODE_OUTPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_PULLDOWN_DISABLE,
+      .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&gpio_cfg);
+    gpio_set_level(static_cast<gpio_num_t>(this->power_ctrl_pin_), 0);
+    ESP_LOGI(TAG, "SD Card power control enabled on GPIO %d", this->power_ctrl_pin_);
+  }
+
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
       .format_if_mount_failed = false, .max_files = 5, .allocation_unit_size = 16 * 1024};
 
@@ -37,7 +53,6 @@ void SdMmc::setup() {
   slot_config.clk = static_cast<gpio_num_t>(this->clk_pin_);
   slot_config.cmd = static_cast<gpio_num_t>(this->cmd_pin_);
   slot_config.d0 = static_cast<gpio_num_t>(this->data0_pin_);
-  slot_config.power = static_cast<gpio_num_t>(this->power_pin_); 
 
   if (!this->mode_1bit_) {
     slot_config.d1 = static_cast<gpio_num_t>(this->data1_pin_);
