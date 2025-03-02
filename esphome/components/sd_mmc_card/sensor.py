@@ -4,7 +4,7 @@ from esphome.components import sensor
 from esphome.const import (
     CONF_TYPE,
     STATE_CLASS_MEASUREMENT,
-    UNIT_BYTES,
+    UNIT_GIGABYTES,
     ICON_MEMORY,
 )
 from . import (
@@ -24,9 +24,9 @@ TYPES = [CONF_USED_SPACE, CONF_TOTAL_SPACE, CONF_USED_SPACE, CONF_FREE_SPACE]
 SIMPLE_TYPES = [CONF_USED_SPACE, CONF_TOTAL_SPACE, CONF_FREE_SPACE]
 
 BASE_CONFIG_SCHEMA = sensor.sensor_schema(
-    unit_of_measurement=UNIT_BYTES,
+    unit_of_measurement=UNIT_GIGABYTES,
     icon=ICON_MEMORY,
-    accuracy_decimals=2,
+    accuracy_decimals=1,
     state_class=STATE_CLASS_MEASUREMENT,
 ).extend(
     {
