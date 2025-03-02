@@ -8,7 +8,6 @@ from esphome.const import (
     CONF_CLK_PIN,
     CONF_MODE,
     STATE_CLASS_MEASUREMENT,
-    UNIT_MEGABYTE,
     ICON_CARD_BULK,
     ICON_SD,
 )
