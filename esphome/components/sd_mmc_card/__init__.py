@@ -59,11 +59,11 @@ async def to_code(config):
     await cg.register_component(var, config)
 
     cg.add(var.set_mode_1bit(config[CONF_MODE_1BIT]))
-    cg.add(var.set_power_pin(config[CONF_MODE_1BIT]))
+    cg.add(var.set_power_pin(config[CONF_POWER_PIN]))
 
     cg.add(var.set_clk_pin(config[CONF_CLK_PIN]))
     cg.add(var.set_cmd_pin(config[CONF_CMD_PIN]))
-    cg.add(var.set_data0_pin(config[CONF_POWER_PIN]))
+    cg.add(var.set_data0_pin(config[CONF_DATA0_PIN]))
 
     if (config[CONF_MODE_1BIT] == False):
         cg.add(var.set_data1_pin(config[CONF_DATA1_PIN]))
