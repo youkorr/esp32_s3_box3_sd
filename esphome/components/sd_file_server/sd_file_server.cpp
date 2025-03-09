@@ -215,10 +215,9 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   ESP_LOGD(TAG, "Sending file: %s, size: %d bytes", filename.c_str(), file.size());
   
 #ifdef USE_ESP_IDF
-  // Utiliser le constructeur de réponse approprié pour ESP-IDF
-  AsyncWebServerResponse *response = request->beginResponse(200, "application/octet-stream", 
-                                         reinterpret_cast<const char*>(file.data()), 
-                                         file.size());
+  // Correction pour ESP-IDF - utiliser une chaîne de caractères au lieu d'un tableau d'octets
+  std::string file_content(reinterpret_cast<const char*>(file.data()), file.size());
+  AsyncWebServerResponse *response = request->beginResponse(200, "application/octet-stream", file_content);
   // Ajouter l'en-tête pour forcer le téléchargement
   response->addHeader("Content-Disposition", ("attachment; filename=" + filename).c_str());
   response->addHeader("Cache-Control", "no-cache");
