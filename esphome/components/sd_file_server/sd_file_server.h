@@ -22,7 +22,6 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void set_deletion_enabled(bool);
   void set_download_enabled(bool);
   void set_upload_enabled(bool);
-
  protected:
   web_server_base::WebServerBase *base_;
   sd_mmc_card::SdMmc *sd_mmc_card_;
