@@ -29,7 +29,7 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "%s", request->url().c_str());
+  ESP_LOGD(TAG, "Handle request method: %d, URL: %s", request->method(), request->url().c_str());
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
       this->handle_get(request);
@@ -148,15 +148,47 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 
   response->print(F("</tbody></table>"
                     "<script>"
-                    "function delete_file(path) {fetch(path, {method: \"DELETE\"});}"
+                    "function delete_file(path) {"
+                    "  if (confirm('Êtes-vous sûr de vouloir supprimer ce fichier?')) {"
+                    "    fetch(path, {method: 'DELETE'})"
+                    "      .then(response => {"
+                    "        if(response.ok) {"
+                    "          alert('Fichier supprimé avec succès');"
+                    "          location.reload();"
+                    "        } else {"
+                    "          response.json().then(data => {"
+                    "            alert('Erreur: ' + (data.error || 'Échec de la suppression'));"
+                    "          }).catch(() => {"
+                    "            alert('Échec de la suppression');"
+                    "          });"
+                    "        }"
+                    "      })"
+                    "      .catch(error => {"
+                    "        console.error('Erreur:', error);"
+                    "        alert('Erreur de connexion');"
+                    "      });"
+                    "  }"
+                    "}"
                     "function download_file(path, filename) {"
-                    "fetch(path).then(response => response.blob())"
-                    ".then(blob => {"
-                    "const link = document.createElement('a');"
-                    "link.href = URL.createObjectURL(blob);"
-                    "link.download = filename;"
-                    "link.click();"
-                    "}).catch(console.error);"
+                    "  fetch(path)"
+                    "    .then(response => {" 
+                    "      if(!response.ok) {"
+                    "        throw new Error('Erreur de téléchargement');"
+                    "      }"
+                    "      return response.blob();"
+                    "    })"
+                    "    .then(blob => {"
+                    "      const link = document.createElement('a');"
+                    "      link.href = URL.createObjectURL(blob);"
+                    "      link.download = filename;"
+                    "      document.body.appendChild(link);"
+                    "      link.click();"
+                    "      document.body.removeChild(link);"
+                    "    })"
+                    "    .catch(error => {"
+                    "      console.error(error);"
+                    "      alert('Échec du téléchargement: ' + error.message);"
+                    "    });"
                     "} "
                     "</script>"
                     "</body></html>"));
@@ -166,20 +198,35 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
+    request->send(403, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
 
+  ESP_LOGD(TAG, "Attempting to download file: %s", path.c_str());
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+    ESP_LOGW(TAG, "Failed to read file: %s", path.c_str());
+    request->send(404, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
+  
+  // Obtenir le nom de fichier pour l'en-tête Content-Disposition
+  std::string filename = Path::file_name(path);
+  ESP_LOGD(TAG, "Sending file: %s, size: %d bytes", filename.c_str(), file.size());
+  
 #ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
+  // Utiliser le constructeur de réponse approprié pour ESP-IDF
+  AsyncWebServerResponse *response = request->beginResponse(200, "application/octet-stream", 
+                                         reinterpret_cast<const char*>(file.data()), 
+                                         file.size());
+  // Ajouter l'en-tête pour forcer le téléchargement
+  response->addHeader("Content-Disposition", ("attachment; filename=" + filename).c_str());
+  response->addHeader("Cache-Control", "no-cache");
 #else
-  auto *response = request->beginResponseStream("application/octet", file.size());
+  AsyncWebServerResponse *response = request->beginResponseStream("application/octet-stream", file.size());
   response->write(file.data(), file.size());
+  response->addHeader("Content-Disposition", ("attachment; filename=" + filename).c_str());
+  response->addHeader("Cache-Control", "no-cache");
 #endif
 
   request->send(response);
@@ -187,20 +234,28 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   if (!this->deletion_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
+    request->send(403, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
   }
+  
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
+  
+  ESP_LOGD(TAG, "Attempting to delete file: %s", path.c_str());
+  
   if (this->sd_mmc_card_->is_directory(path)) {
-    request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
+    request->send(400, "application/json", "{ \"error\": \"cannot delete a directory\" }");
     return;
   }
+  
   if (this->sd_mmc_card_->delete_file(path)) {
-    request->send(204, "application/json", "{}");
+    ESP_LOGD(TAG, "File deleted successfully: %s", path.c_str());
+    request->send(200, "application/json", "{ \"success\": true }");
     return;
   }
-  request->send(401, "application/json", "{ \"error\": \"failed to delete file\" }");
+  
+  ESP_LOGW(TAG, "Failed to delete file: %s", path.c_str());
+  request->send(500, "application/json", "{ \"error\": \"failed to delete file\" }");
 }
 
 std::string SDFileServer::build_prefix() const {
