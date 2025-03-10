@@ -1,8 +1,11 @@
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
-#include "esphome/components/sd_mmc_card/sd_mmc_card.h"
-#include "esphome/components/web_server_base/web_server_base.h"
-#include "SD_MMC.h"   // Utilisez cette bibliothèque pour SD sur ESP32
+#include "esphome/components/network/util.h"
+#include "esphome/core/helpers.h"
+
+// Inclure la bibliothèque SD appropriée pour l'ESP32
+#include "SD_MMC.h"  // Si vous utilisez SDMMC
+// #include "SD.h"  // Si vous utilisez SPI
 
 namespace esphome {
 namespace sd_file_server {
@@ -44,7 +47,9 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 
   std::string file_path = this->build_absolute_path(filename.c_str());
 
-  File file = SD_MMC.open(file_path.c_str(), FILE_WRITE);  // Utilisez SD_MMC pour l'ESP32
+  // Ouvrir le fichier en mode écriture
+  File file = SD_MMC.open(file_path.c_str(), FILE_WRITE);  // Si vous utilisez SDMMC
+  // File file = SD.open(file_path.c_str(), FILE_WRITE);  // Si vous utilisez SPI
   if (!file) {
     ESP_LOGE(TAG, "Failed to open file %s for writing", file_path.c_str());
     request->send(500, "text/plain", "Failed to open file for writing");
@@ -118,5 +123,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
