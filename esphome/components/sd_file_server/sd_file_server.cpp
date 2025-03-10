@@ -14,7 +14,7 @@ void SDFileServer::setup() {
   this->base_->add_handler(this); 
   
   // Ajouter l'enregistrement pour les téléchargements de fichiers
-  this->base_->add_upload_handler(
+  this->base_->add_ota_handler(
       this,
       [this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
              bool final) { this->handleUpload(request, filename, index, data, len, final); });
