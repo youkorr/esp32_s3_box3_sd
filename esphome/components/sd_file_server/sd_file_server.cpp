@@ -2,8 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/components/sd_mmc_card/sd_mmc_card.h"
 #include "esphome/components/web_server_base/web_server_base.h"
-#include "FS.h"   // Ajoutez cette ligne pour la gestion des fichiers
-#include "SD.h"   // Ajoutez cette ligne si vous utilisez la bibliothèque SD
+#include "SD_MMC.h"   // Utilisez cette bibliothèque pour SD sur ESP32
 
 namespace esphome {
 namespace sd_file_server {
@@ -25,12 +24,10 @@ void SDFileServer::dump_config() {
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
-  // Remplacez startsWith par starts_with
   return request->url().starts_with("/" + this->url_prefix_) && request->method() == HTTP_POST;
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  // Si l'upload est activé et que l'URL commence par le préfixe, nous traitons l'upload
   if (this->upload_enabled_ && request->url().starts_with("/" + this->url_prefix_)) {
     request->send(200, "text/plain", "Send file to upload");
   } else {
@@ -40,28 +37,23 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
 
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
                                 bool final) {
-  // Vérifiez si l'upload est activé
   if (!this->upload_enabled_) {
     request->send(400, "text/plain", "Upload is not enabled");
     return;
   }
 
-  // Création du chemin du fichier sur la carte SD
   std::string file_path = this->build_absolute_path(filename.c_str());
 
-  // Ouvrir le fichier pour écrire
-  File file = SD_MMC.open(file_path.c_str(), FILE_WRITE);  // Utilisez SD_MMC ici
+  File file = SD_MMC.open(file_path.c_str(), FILE_WRITE);  // Utilisez SD_MMC pour l'ESP32
   if (!file) {
     ESP_LOGE(TAG, "Failed to open file %s for writing", file_path.c_str());
     request->send(500, "text/plain", "Failed to open file for writing");
     return;
   }
 
-  // Écrire les données dans le fichier
   file.write(data, len);
   file.close();
 
-  // Si l'upload est terminé (final), envoyer la réponse
   if (final) {
     ESP_LOGI(TAG, "File %s uploaded successfully", filename.c_str());
     request->send(200, "text/plain", "File uploaded successfully");
@@ -109,7 +101,6 @@ std::string SDFileServer::build_absolute_path(std::string file_name) const {
 }
 
 void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
-  // Corrigez l'accès aux membres `name` et `size` de `FileInfo`
   response->printf("<tr><td>%s</td><td>%u</td><td><a href='/delete/%s'>Delete</a></td></tr>", info.get_name().c_str(), info.get_size(), info.get_name().c_str());
 }
 
@@ -127,4 +118,5 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
