@@ -48,51 +48,27 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
   }
-
-  // Extraire le chemin du fichier à partir de l'URL
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
 
-  // Vérifier si le chemin de téléchargement est un dossier existant
-  if (index == 0 && !this->sd_mmc_card_->exists(path.c_str())) {
-    // Vérifie si le dossier est valide (existe)
+  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
     auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
     response->addHeader("Connection", "close");
     request->send(response);
     return;
   }
-
-  String file_name(filename.c_str());
-
+  std::string file_name(filename.c_str());
   if (index == 0) {
-    ESP_LOGD(TAG, "Uploading file %s to %s", file_name.c_str(), path.c_str());
-    
-    // Ouvrir ou créer un fichier pour l'écriture
-    File file = this->sd_mmc_card_->open(Path::join(path, file_name).c_str(), FILE_WRITE);
-    if (!file) {
-      ESP_LOGE(TAG, "Failed to open file for writing");
-      request->send(500, "application/json", "{ \"error\": \"failed to open file for writing\" }");
-      return;
-    }
-    file.write(data, len);  // Écrire les données dans le fichier
-    file.close();  // Fermer le fichier après l'écriture
-  } else {
-    // Ajouter des données au fichier existant
-    File file = this->sd_mmc_card_->open(Path::join(path, file_name).c_str(), FILE_APPEND);
-    if (!file) {
-      ESP_LOGE(TAG, "Failed to open file for appending");
-      request->send(500, "application/json", "{ \"error\": \"failed to open file for appending\" }");
-      return;
-    }
-    file.write(data, len);  // Ajouter des données au fichier existant
-    file.close();  // Fermer le fichier après l'écriture
+    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
+    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
+    return;
   }
-
+  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
   if (final) {
-    // Réponse après le téléchargement réussi
     auto response = request->beginResponse(201, "text/html", "upload success");
     response->addHeader("Connection", "close");
     request->send(response);
+    return;
   }
 }
 
@@ -172,7 +148,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 
   response->print(F("</tbody></table>"
                     "<script>"
-                    "function delete_file(path) {fetch(path, {method: \"DELETE\"});} "
+                    "function delete_file(path) {fetch(path, {method: \"DELETE\"});}"
                     "function download_file(path, filename) {"
                     "fetch(path).then(response => response.blob())"
                     ".then(blob => {"
@@ -234,7 +210,7 @@ std::string SDFileServer::build_prefix() const {
 }
 
 std::string SDFileServer::extract_path_from_url(std::string const &url) const {
-    std::string prefix = this->build_prefix();
+  std::string prefix = this->build_prefix();
   return url.substr(prefix.size(), url.size() - prefix.size());
 }
 
