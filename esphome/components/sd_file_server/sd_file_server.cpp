@@ -3,9 +3,7 @@
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
 
-// Inclure la bibliothèque SD appropriée pour l'ESP32
-#include "SD_MMC.h"  // Si vous utilisez SDMMC
-// #include "SD.h"  // Si vous utilisez SPI
+
 
 namespace esphome {
 namespace sd_file_server {
