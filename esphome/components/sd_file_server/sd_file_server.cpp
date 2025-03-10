@@ -10,7 +10,15 @@ static const char *TAG = "sd_file_server";
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
+void SDFileServer::setup() { 
+  this->base_->add_handler(this); 
+  
+  // Ajouter l'enregistrement pour les téléchargements de fichiers
+  this->base_->add_upload_handler(
+      this,
+      [this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
+             bool final) { this->handleUpload(request, filename, index, data, len, final); });
+}
 
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
@@ -39,7 +47,16 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       this->handle_delete(request);
       return;
     }
+    if (request->method() == HTTP_POST) {
+      // Les téléchargements seront gérés par handleUpload
+      // Cette partie est pour les POST sans upload de fichier
+      request->send(200, "text/plain", "Requête POST reçue");
+      return;
+    }
   }
+  
+  // Si aucune méthode ne correspond, renvoyer une erreur 404
+  request->send(404, "text/plain", "Not found");
 }
 
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
@@ -137,7 +154,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print(path.c_str());
   response->print(F("</h2>"));
   if (this->upload_enabled_)
-    response->print(F("<form method=\"POST\" enctype=\"multipart/form-data\">"
+    response->print(F("<form method=\"POST\" action=\"\" enctype=\"multipart/form-data\">"
                       "<input type=\"file\" name=\"file\"><input type=\"submit\" value=\"upload\"></form>"));
   response->print(F("<a href=\"/"));
   response->print(this->url_prefix_.c_str());
