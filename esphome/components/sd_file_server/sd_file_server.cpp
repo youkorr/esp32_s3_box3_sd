@@ -2,8 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
-
-
+#include "SD_MMC.h"  // Utiliser cette bibliothèque pour SDMMC
 
 namespace esphome {
 namespace sd_file_server {
@@ -47,7 +46,6 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 
   // Ouvrir le fichier en mode écriture
   File file = SD_MMC.open(file_path.c_str(), FILE_WRITE);  // Si vous utilisez SDMMC
-  // File file = SD.open(file_path.c_str(), FILE_WRITE);  // Si vous utilisez SPI
   if (!file) {
     ESP_LOGE(TAG, "Failed to open file %s for writing", file_path.c_str());
     request->send(500, "text/plain", "Failed to open file for writing");
@@ -104,6 +102,7 @@ std::string SDFileServer::build_absolute_path(std::string file_name) const {
 }
 
 void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
+  // Mise à jour de la méthode pour récupérer les informations du fichier correctement
   response->printf("<tr><td>%s</td><td>%u</td><td><a href='/delete/%s'>Delete</a></td></tr>", info.get_name().c_str(), info.get_size(), info.get_name().c_str());
 }
 
@@ -121,6 +120,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
