@@ -72,6 +72,10 @@ class SdMmc : public Component {
   std::vector<FileInfo> list_directory_file_info(std::string path, uint8_t depth);
   size_t file_size(const char *path);
   size_t file_size(std::string const &path);
+  
+  // ******** NOUVELLE FONCTION ********
+  bool read_file_stream(const char *path, uint8_t *buffer, size_t buffer_size, uint32_t offset);
+  
 #ifdef USE_SENSOR
   void add_file_size_sensor(sensor::Sensor *, std::string const &path);
 #endif
@@ -94,7 +98,7 @@ class SdMmc : public Component {
   uint8_t data2_pin_;
   uint8_t data3_pin_;
   bool mode_1bit_;
-  int8_t power_ctrl_pin_{-1};  // Changement de uint8_t à int8_t pour permettre -1
+  int8_t power_ctrl_pin_{-1};
 #ifdef USE_ESP_IDF
   sdmmc_card_t *card_;
 #endif
@@ -180,6 +184,30 @@ template<typename... Ts> class SdMmcDeleteFileAction : public Action<Ts...> {
   void play(Ts... x) {
     auto path = this->path_.value(x...);
     this->parent_->delete_file(path.c_str());
+  }
+
+ protected:
+  SdMmc *parent_;
+};
+
+template<typename... Ts> class SdMmcReadFileStreamAction : public Action<Ts...> {
+ public:
+  SdMmcReadFileStreamAction(SdMmc *parent) : parent_(parent) {}
+  TEMPLATABLE_VALUE(std::string, path)
+  TEMPLATABLE_VALUE(uint32_t, buffer_size)
+  TEMPLATABLE_VALUE(uint32_t, offset)
+
+  void play(Ts... x) {
+    auto path = this->path_.value(x...);
+    auto buffer_size = this->buffer_size_.value(x...);
+    auto offset = this->offset_.value(x...);
+    
+    uint8_t buffer[buffer_size];
+    bool success = this->parent_->read_file_stream(path.c_str(), buffer, buffer_size, offset);
+    
+    if (success) {
+      // Traitez les données du buffer ici
+    }
   }
 
  protected:
