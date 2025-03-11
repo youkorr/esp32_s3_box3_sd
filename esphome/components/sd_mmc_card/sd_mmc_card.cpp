@@ -46,9 +46,9 @@ void SdMmc::dump_config() {
   }
 }
 
-void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
+void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode) {
   ESP_LOGV(TAG, "Writing to file: %s", path);
-  this->write_file(path, buffer, len, "w");
+  this->write_file(path, buffer, len, mode);
 }
 
 void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
@@ -59,7 +59,7 @@ void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
 std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
   std::vector<std::string> list;
   std::vector<FileInfo> infos = list_directory_file_info(path, depth);
-  std::transform(infos.cbegin(), infos.cend(), list.begin(), [](FileInfo const &info) { return info.path; });
+  std::transform(infos.cbegin(), infos.cend(), std::back_inserter(list), [](FileInfo const &info) { return info.path; });
   return list;
 }
 
@@ -124,6 +124,32 @@ long double convertBytes(uint64_t value, MemoryUnits unit) {
 
 FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
     : path(path), size(size), is_directory(is_directory) {}
+
+// ******** NOUVELLE FONCTION ********
+bool SdMmc::read_file_stream(const char *path, uint8_t *buffer, size_t buffer_size, uint32_t offset) {
+  if (!SD_MMC.begin()) {
+    ESP_LOGE(TAG, "SD card not initialized");
+    return false;
+  }
+
+  File file = SD_MMC.open(path);
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file: %s", path);
+    return false;
+  }
+
+  if (file.size() < offset) {
+    ESP_LOGE(TAG, "Offset exceeds file size");
+    file.close();
+    return false;
+  }
+
+  file.seek(offset);
+  size_t bytes_read = file.read(buffer, buffer_size);
+  file.close();
+
+  return bytes_read == buffer_size;
+}
 
 }  // namespace sd_mmc_card
 }  // namespace esphome
