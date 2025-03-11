@@ -6,6 +6,8 @@
 namespace esphome {
 namespace sd_file_server {
 
+static const char *const TAG = "sd_file_server";  // Ajout de la constante TAG
+
 class SDFileServer : public Component, public AsyncWebHandler {
  public:
   SDFileServer(web_server_base::WebServerBase *);
