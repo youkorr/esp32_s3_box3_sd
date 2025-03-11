@@ -33,6 +33,14 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   }
 }
 
+void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
+
+void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = path; }
+
+void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
+
+void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = allow; }
+
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
@@ -153,6 +161,38 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
   std::string absolute = Path::join(this->root_path_, relative_path);
   return absolute;
+}
+
+std::string Path::file_name(std::string const &path) {
+  size_t pos = path.rfind(Path::separator);
+  if (pos != std::string::npos) {
+    return path.substr(pos + 1);
+  }
+  return "";
+}
+
+bool Path::is_absolute(std::string const &path) { return path.size() && path[0] == separator; }
+
+bool Path::trailing_slash(std::string const &path) { return path.size() && path[path.length() - 1] == separator; }
+
+std::string Path::join(std::string const &first, std::string const &second) {
+  std::string result = first;
+  if (!trailing_slash(first) && !is_absolute(second)) {
+    result.push_back(separator);
+  }
+  if (trailing_slash(first) && is_absolute(second)) {
+    result.pop_back();
+  }
+  result.append(second);
+  return result;
+}
+
+std::string Path::remove_root_path(std::string path, std::string const &root) {
+  if (!str_startswith(path, root))
+    return path;
+  if (path.size() == root.size() || path.size() < 2)
+    return "/";
+  return path.erase(0, root.size());
 }
 
 }  // namespace sd_file_server
