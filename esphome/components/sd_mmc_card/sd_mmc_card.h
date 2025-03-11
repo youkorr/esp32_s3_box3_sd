@@ -64,6 +64,8 @@ class SdMmc : public Component {
   bool remove_directory(const char *path);
   std::vector<uint8_t> read_file(char const *path);
   std::vector<uint8_t> read_file(std::string const &path);
+  bool read_file_chunked(const char *path, std::function<void(const uint8_t *buffer, size_t len)> callback, size_t chunk_size = 512);
+  bool read_file_chunked(std::string const &path, std::function<void(const uint8_t *buffer, size_t len)> callback, size_t chunk_size = 512);
   bool is_directory(const char *path);
   bool is_directory(std::string const &path);
   std::vector<std::string> list_directory(const char *path, uint8_t depth);
@@ -83,7 +85,7 @@ class SdMmc : public Component {
   void set_data2_pin(uint8_t);
   void set_data3_pin(uint8_t);
   void set_mode_1bit(bool);
-  void set_power_ctrl_pin(GPIOPin *);
+  void set_power_ctrl_pin(int8_t pin) { this->power_ctrl_pin_ = pin; }
 
  protected:
   ErrorCode init_error_;
@@ -94,8 +96,7 @@ class SdMmc : public Component {
   uint8_t data2_pin_;
   uint8_t data3_pin_;
   bool mode_1bit_;
-  GPIOPin *power_ctrl_pin_{nullptr};
-
+  int8_t power_ctrl_pin_{-1};
 #ifdef USE_ESP_IDF
   sdmmc_card_t *card_;
 #endif
