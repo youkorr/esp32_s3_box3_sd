@@ -78,7 +78,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t bytes_read;
 
   while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
-    response->print(reinterpret_cast<const char*>(buffer), bytes_read);  // Utilisation de print pour envoyer les données
+    response->write(buffer, bytes_read);  // ⚡ Correction clé ici
   }
 
   // Fermer le fichier
