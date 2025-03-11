@@ -1,70 +1,51 @@
-#include "sd_file_server.h"
-#include "esphome/core/log.h"
-#include "esphome/components/network/util.h"
-#include "esphome/core/helpers.h"
+#pragma once
+#include "esphome/core/component.h"
+#include "esphome/components/web_server_base/web_server_base.h"
+#include "../sd_mmc_card/sd_mmc_card.h"
 
 namespace esphome {
 namespace sd_file_server {
 
-static const char *TAG = "sd_file_server";
+class SDFileServer : public Component, public AsyncWebHandler {
+ public:
+  SDFileServer(web_server_base::WebServerBase *base);
+  void setup() override;
+  void dump_config() override;
+  bool canHandle(AsyncWebServerRequest *request) override;
+  void handleRequest(AsyncWebServerRequest *request) override;
+  bool isRequestHandlerTrivial() override { return false; }
 
-SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
+  void set_url_prefix(std::string const &prefix);
+  void set_root_path(std::string const &path);
+  void set_sd_mmc_card(sd_mmc_card::SdMmc *card);
+  void set_download_enabled(bool allow);
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
+ protected:
+  web_server_base::WebServerBase *base_;
+  sd_mmc_card::SdMmc *sd_mmc_card_;
 
-void SDFileServer::dump_config() {
-  ESP_LOGCONFIG(TAG, "SD File Server:");
-  ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
-  ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
-  ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
-}
+  std::string url_prefix_;
+  std::string root_path_;
+  bool download_enabled_;
 
-bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
-  return str_startswith(std::string(request->url().c_str()), this->build_prefix());
-}
+  std::string build_prefix() const;
+  std::string extract_path_from_url(std::string const &url) const;
+  std::string build_absolute_path(std::string relative_path) const;
+  void write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const;
+  void handle_index(AsyncWebServerRequest *request, std::string const &path) const;
+  void handle_get(AsyncWebServerRequest *request) const;
+  void handle_download(AsyncWebServerRequest *request, std::string const &path) const;
+};
 
-void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
-    if (request->method() == HTTP_GET) {
-      this->handle_get(request);
-      return;
-    }
-  }
-}
+struct Path {
+  static constexpr char separator = '/';
 
-void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
-  if (!this->download_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
-    return;
-  }
-
-  // Ouvrir le fichier en mode lecture
-  FILE *file = fopen(path.c_str(), "rb");
-  if (!file) {
-    request->send(401, "application/json", "{ \"error\": \"failed to open file\" }");
-    return;
-  }
-
-  // Définir la taille du chunk (par exemple, 4096 octets)
-  const size_t chunk_size = 4096;
-  uint8_t buffer[chunk_size];
-
-  // Créer une réponse stream
-  auto *response = request->beginResponseStream("audio/mpeg");
-
-  // Lire et envoyer le fichier par morceaux
-  size_t bytes_read;
-  while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
-    response->write(buffer, bytes_read);
-  }
-
-  // Fermer le fichier
-  fclose(file);
-
-  // Envoyer la réponse
-  request->send(response);
-}
+  static std::string file_name(std::string const &path);
+  static bool is_absolute(std::string const &path);
+  static bool trailing_slash(std::string const &path);
+  static std::string join(std::string const &first, std::string const &second);
+  static std::string remove_root_path(std::string path, std::string const &root);
+};
 
 }  // namespace sd_file_server
 }  // namespace esphome
