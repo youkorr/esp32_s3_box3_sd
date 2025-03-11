@@ -60,14 +60,16 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
   auto *response = request->beginResponseStream(mime_type.c_str());
   std::string file_name = Path::file_name(path);
-  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+  
+  // Correction clé : Conversion explicite avec .c_str() <button class="citation-flag" data-index="5">
+  response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
 
   const size_t chunk_size = 4096;
   uint8_t buffer[chunk_size];
   size_t bytes_read;
 
   while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
-    // ⚡ Correction clé : Utilisation de std::string pour les données binaires
+    // Gestion des données binaires via std::string <button class="citation-flag" data-index="1"><button class="citation-flag" data-index="3">
     response->print(std::string(reinterpret_cast<const char*>(buffer), bytes_read));
   }
 
