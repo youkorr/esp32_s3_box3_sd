@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <math.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #include "esphome/core/log.h"
+#include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace sd_mmc_card {
@@ -154,8 +157,8 @@ void SdMmc::update_sensors() {
 #endif
 
 #ifdef USE_TEXT_SENSOR
-  if (this->sd_card_type_sensor_ != nullptr) {
-    this->sd_card_type_sensor_->publish_state(this->get_sd_card_type());
+  if (this->sd_card_type_text_sensor_ != nullptr) {
+    this->sd_card_type_text_sensor_->publish_state(this->sd_card_type());
   }
 #endif
 }
