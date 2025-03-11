@@ -1,5 +1,4 @@
 #include "sd_mmc_card.h"
-#include "SPIFFS.h"
 #include "ff.h"
 #include "diskio.h"
 
@@ -129,65 +128,97 @@ bool SdMmc::delete_file(const char *path) {
 std::vector<uint8_t> SdMmc::read_file(char const *path) {
   ESP_LOGV(TAG, "Read File: %s", path);
   std::string absolut_path = build_path(path);
-  if (!SPIFFS.exists(absolut_path)) {
-    ESP_LOGE(TAG, "File does not exist: %s", path);
+  
+  // Use FATFS file functions instead of SPIFFS
+  FIL file;
+  FRESULT res = f_open(&file, absolut_path.c_str(), FA_READ);
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "File does not exist or cannot be opened: %s (error %d)", path, res);
     return std::vector<uint8_t>();
   }
 
-  size_t fileSize = this->file_size(path);
+  // Get file size
+  FILINFO finfo;
+  res = f_stat(absolut_path.c_str(), &finfo);
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "Failed to get file info: %s (error %d)", path, res);
+    f_close(&file);
+    return std::vector<uint8_t>();
+  }
+  
+  size_t fileSize = finfo.fsize;
+  ESP_LOGV(TAG, "Reading file: %zu bytes", fileSize);
 
   std::vector<uint8_t> result;
   result.resize(fileSize);
 
-  ESP_LOGV(TAG, "Reading file: %zu bytes", fileSize);
-
-  size_t bytesRead = 0;
-  while (bytesRead < fileSize) {
-    size_t chunkSize = std::min<size_t>(fileSize - bytesRead, 1024); // Adjust chunk size as needed
-    if (SPIFFS.read(absolut_path.c_str(), bytesRead, chunkSize, result.data() + bytesRead) != chunkSize) {
-      ESP_LOGE(TAG, "Failed to read file");
-      return std::vector<uint8_t>();
-    }
-    bytesRead += chunkSize;
+  UINT bytesRead;
+  res = f_read(&file, result.data(), fileSize, &bytesRead);
+  if (res != FR_OK || bytesRead != fileSize) {
+    ESP_LOGE(TAG, "Failed to read file: %s (error %d, read %u of %zu)", path, res, bytesRead, fileSize);
+    f_close(&file);
+    return std::vector<uint8_t>();
   }
 
+  f_close(&file);
   return result;
 }
 
 void SdMmc::read_file_by_chunks(const char *path, size_t chunk_size, void (*callback)(const uint8_t *, size_t)) {
   std::string absolut_path = build_path(path);
-  if (!SPIFFS.exists(absolut_path)) {
-    ESP_LOGE(TAG, "File does not exist: %s", path);
+  
+  // Use FATFS file functions instead of SPIFFS
+  FIL file;
+  FRESULT res = f_open(&file, absolut_path.c_str(), FA_READ);
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "File does not exist or cannot be opened: %s (error %d)", path, res);
     return;
   }
 
-  size_t fileSize = this->file_size(path);
+  // Get file size
+  FILINFO finfo;
+  res = f_stat(absolut_path.c_str(), &finfo);
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "Failed to get file info: %s (error %d)", path, res);
+    f_close(&file);
+    return;
+  }
+  
+  size_t fileSize = finfo.fsize;
   if (fileSize == 0) {
     ESP_LOGW(TAG, "File is empty");
+    f_close(&file);
     return;
   }
 
-  size_t offset = 0;
   uint8_t buffer[chunk_size];
-
-  while (offset < fileSize) {
-    size_t remaining = fileSize - offset;
-    size_t chunk_len = (remaining < chunk_size) ? remaining : chunk_size;
-
-    if (SPIFFS.read(absolut_path.c_str(), offset, chunk_len, buffer) != chunk_len) {
-      ESP_LOGE(TAG, "Failed to read chunk starting at offset %zu", offset);
+  size_t totalBytesRead = 0;
+  
+  while (totalBytesRead < fileSize) {
+    UINT bytesRead;
+    res = f_read(&file, buffer, chunk_size, &bytesRead);
+    
+    if (res != FR_OK) {
+      ESP_LOGE(TAG, "Failed to read chunk at offset %zu (error %d)", totalBytesRead, res);
+      f_close(&file);
       return;
     }
-
-    callback(buffer, chunk_len);
-
-    offset += chunk_len;
+    
+    if (bytesRead == 0) {
+      break; // End of file
+    }
+    
+    callback(buffer, bytesRead);
+    totalBytesRead += bytesRead;
   }
+  
+  f_close(&file);
 }
 
 std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
   std::vector<std::string> list;
   std::vector<FileInfo> infos = list_directory_file_info(path, depth);
+  list.resize(infos.size());
   std::transform(infos.cbegin(), infos.cend(), list.begin(), [](FileInfo const &info) { return info.path; });
   return list;
 }
@@ -208,22 +239,29 @@ std::vector<FileInfo> SdMmc::list_directory_file_info(std::string path, uint8_t 
 
 size_t SdMmc::file_size(const char *path) {
   std::string absolut_path = build_path(path);
-  struct stat info;
-  size_t file_size = 0;
-  if (stat(absolut_path.c_str(), &info) < 0) {
-    ESP_LOGE(TAG, "Failed to stat file: %s", strerror(errno));
+  
+  // Use FATFS file functions instead of SPIFFS
+  FILINFO finfo;
+  FRESULT res = f_stat(absolut_path.c_str(), &finfo);
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "Failed to get file info: %s (error %d)", path, res);
     return -1;
   }
-  return info.st_size;
+  
+  return finfo.fsize;
 }
 
 bool SdMmc::is_directory(const char *path) {
   std::string absolut_path = build_path(path);
-  DIR *dir = opendir(absolut_path.c_str());
-  if (dir) {
-    closedir(dir);
+  
+  // Use FATFS file functions instead of SPIFFS
+  FILINFO finfo;
+  FRESULT res = f_stat(absolut_path.c_str(), &finfo);
+  if (res != FR_OK) {
+    return false;
   }
-  return dir != nullptr;
+  
+  return (finfo.fattrib & AM_DIR) != 0;
 }
 
 #ifdef USE_SENSOR
@@ -264,38 +302,45 @@ std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
 std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list) {
   ESP_LOGV(TAG, "Listing directory file info: %s\n", path);
   std::string absolut_path = build_path(path);
-  DIR *dir = opendir(absolut_path.c_str());
-  if (!dir) {
-    ESP_LOGE(TAG, "Failed to open directory: %s", strerror(errno));
+  
+  // Use FATFS file functions instead of SPIFFS
+  DIR dir;
+  FILINFO finfo;
+  FRESULT res = f_opendir(&dir, absolut_path.c_str());
+  if (res != FR_OK) {
+    ESP_LOGE(TAG, "Failed to open directory: %s (error %d)", path, res);
     return list;
   }
-  char entry_absolut_path[FILE_PATH_MAX];
+  
   char entry_path[FILE_PATH_MAX];
-  const size_t dirpath_len = MOUNT_POINT.size();
   size_t entry_path_len = strlen(path);
   strlcpy(entry_path, path, sizeof(entry_path));
   strlcpy(entry_path + entry_path_len, "/", sizeof(entry_path) - entry_path_len);
   entry_path_len = strlen(entry_path);
 
-  strlcpy(entry_absolut_path, MOUNT_POINT.c_str(), sizeof(entry_absolut_path));
-  struct dirent *entry;
-  while ((entry = readdir(dir)) != nullptr) {
-    size_t file_size = 0;
-    strlcpy(entry_path + entry_path_len, entry->d_name, sizeof(entry_path) - entry_path_len);
-    strlcpy(entry_absolut_path + dirpath_len, entry_path, sizeof(entry_absolut_path) - dirpath_len);
-    if (entry->d_type != DT_DIR) {
-      struct stat info;
-      if (stat(entry_absolut_path, &info) < 0) {
-        ESP_LOGE(TAG, "Failed to stat file: %s '%s' %s", strerror(errno), entry->d_name, entry_absolut_path);
-      } else {
-        file_size = info.st_size;
-      }
+  while (true) {
+    res = f_readdir(&dir, &finfo);
+    if (res != FR_OK || finfo.fname[0] == 0) {
+      break; // Error or end of directory
     }
-    list.emplace_back(entry_path, file_size, entry->d_type == DT_DIR);
-    if (entry->d_type == DT_DIR && depth)
-      list_directory_file_info_rec(entry_absolut_path, depth - 1, list);
+    
+    if (strcmp(finfo.fname, ".") == 0 || strcmp(finfo.fname, "..") == 0) {
+      continue; // Skip . and .. entries
+    }
+    
+    strlcpy(entry_path + entry_path_len, finfo.fname, sizeof(entry_path) - entry_path_len);
+    bool is_dir = (finfo.fattrib & AM_DIR) != 0;
+    size_t file_size = is_dir ? 0 : finfo.fsize;
+    
+    list.emplace_back(entry_path, file_size, is_dir);
+    
+    if (is_dir && depth > 0) {
+      std::string subdir_path = entry_path;
+      list_directory_file_info_rec(subdir_path.c_str(), depth - 1, list);
+    }
   }
-  closedir(dir);
+  
+  f_closedir(&dir);
   return list;
 }
 
