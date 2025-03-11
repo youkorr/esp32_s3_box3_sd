@@ -1,8 +1,6 @@
 #include "sd_mmc_card.h"
 #include "ff.h"
 #include "diskio.h"
-#include "SPIFFS.h"
-#include "esp_vfs_fat.h"
 #include "driver/gpio.h"
 
 void SdMmc::setup() {
