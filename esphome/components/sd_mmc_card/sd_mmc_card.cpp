@@ -27,6 +27,11 @@ void SdMmc::dump_config() {
     ESP_LOGCONFIG(TAG, "  DATA2 Pin: %d", this->data2_pin_);
     ESP_LOGCONFIG(TAG, "  DATA3 Pin: %d", this->data3_pin_);
   }
+
+  if (this->power_ctrl_pin_ != nullptr) {
+    LOG_PIN("  Power Ctrl Pin: ", this->power_ctrl_pin_);
+  }
+
 #ifdef USE_SENSOR
   LOG_SENSOR("  ", "Used space", this->used_space_sensor_);
   LOG_SENSOR("  ", "Total space", this->total_space_sensor_);
@@ -85,15 +90,6 @@ bool SdMmc::delete_file(std::string const &path) { return this->delete_file(path
 
 std::vector<uint8_t> SdMmc::read_file(std::string const &path) { return this->read_file(path.c_str()); }
 
-bool SdMmc::read_file_chunked(const char *path, std::function<void(const uint8_t *buffer, size_t len)> callback, size_t chunk_size) {
-  return this->read_file_chunked(std::string(path), callback, chunk_size);
-}
-
-bool SdMmc::read_file_chunked(std::string const &path, std::function<void(const uint8_t *buffer, size_t len)> callback, size_t chunk_size) {
-  ESP_LOGV(TAG, "Reading file in chunks: %s", path.c_str());
-  return false; // Implementation will be in platform-specific files
-}
-
 #ifdef USE_SENSOR
 void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
   this->file_size_sensors_.emplace_back(sensor, path);
@@ -113,6 +109,8 @@ void SdMmc::set_data2_pin(uint8_t pin) { this->data2_pin_ = pin; }
 void SdMmc::set_data3_pin(uint8_t pin) { this->data3_pin_ = pin; }
 
 void SdMmc::set_mode_1bit(bool b) { this->mode_1bit_ = b; }
+
+void SdMmc::set_power_ctrl_pin(GPIOPin *pin) { this->power_ctrl_pin_ = pin; }
 
 std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
   switch (code) {
