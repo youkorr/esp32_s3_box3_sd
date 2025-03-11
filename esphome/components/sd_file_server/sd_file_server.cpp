@@ -47,8 +47,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Créer un flux de réponse
-  auto *response = request->beginResponseStream("audio/mpeg");
+  // Créer une réponse personnalisée
+  auto *response = request->beginResponse("audio/mpeg");
 
   // Lire et envoyer les données par morceaux
   const size_t chunk_size = 4096;
@@ -56,7 +56,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t bytes_read;
 
   while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
-    response->write(buffer, bytes_read);  // Utilisation de write pour envoyer les données
+    response->send(buffer, bytes_read);  // Utilisation de send pour envoyer les données
   }
 
   // Fermer le fichier
