@@ -1,40 +1,20 @@
 #include "sd_mmc_card.h"
-
-#ifdef USE_ESP_IDF
-
-#include "math.h"
-#include "esphome/core/log.h"
-#include "esp_vfs.h"
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-#include "driver/sdmmc_host.h"
-#include "driver/sdmmc_types.h"
-#include "driver/gpio.h"
-
-int constexpr SD_OCR_SDHC_CAP = (1 << 30);  // value defined in esp-idf/components/sdmmc/include/sd_protocol_defs.h
-
-namespace esphome {
-namespace sd_mmc_card {
-
-static constexpr size_t FILE_PATH_MAX = ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN;
-static const char *TAG = "sd_mmc_card";
-static const std::string MOUNT_POINT("/sdcard");
-
-std::string build_path(const char *path) { return MOUNT_POINT + path; }
+#include "SPIFFS.h"
+#include "ff.h"
+#include "diskio.h"
 
 void SdMmc::setup() {
-  // Enable SDCard power if power control pin is configured
-  if (this->power_ctrl_pin_ >= 0) {
+  if (this->power_ctrl_pin_ != nullptr) {
     gpio_config_t gpio_cfg = {
-      .pin_bit_mask = 1ULL << this->power_ctrl_pin_,
+      .pin_bit_mask = static_cast<uint64_t>(this->power_ctrl_pin_->get_pin()),
       .mode = GPIO_MODE_OUTPUT,
       .pull_up_en = GPIO_PULLUP_DISABLE,
       .pull_down_en = GPIO_PULLDOWN_DISABLE,
       .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&gpio_cfg);
-    gpio_set_level(static_cast<gpio_num_t>(this->power_ctrl_pin_), 0);
-    ESP_LOGI(TAG, "SD Card power control enabled on GPIO %d", this->power_ctrl_pin_);
+    gpio_set_level(static_cast<gpio_num_t>(this->power_ctrl_pin_->get_pin()), 0);
+    ESP_LOGI(TAG, "SD Card power control enabled on GPIO %d", this->power_ctrl_pin_->get_pin());
   }
 
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -174,8 +154,114 @@ std::vector<uint8_t> SdMmc::read_file(char const *path) {
   return result;
 }
 
-std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth,
-                                                           std::vector<FileInfo> &list) {
+void SdMmc::read_file_by_chunks(const char *path, size_t chunk_size, void (*callback)(const uint8_t *, size_t)) {
+  std::string absolut_path = build_path(path);
+  if (!SPIFFS.exists(absolut_path)) {
+    ESP_LOGE(TAG, "File does not exist: %s", path);
+    return;
+  }
+
+  size_t fileSize = this->file_size(path);
+  if (fileSize == 0) {
+    ESP_LOGW(TAG, "File is empty");
+    return;
+  }
+
+  size_t offset = 0;
+  uint8_t buffer[chunk_size];
+
+  while (offset < fileSize) {
+    size_t remaining = fileSize - offset;
+    size_t chunk_len = (remaining < chunk_size) ? remaining : chunk_size;
+
+    if (SPIFFS.read(absolut_path.c_str(), offset, chunk_len, buffer) != chunk_len) {
+      ESP_LOGE(TAG, "Failed to read chunk starting at offset %zu", offset);
+      return;
+    }
+
+    callback(buffer, chunk_len);
+
+    offset += chunk_len;
+  }
+}
+
+std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
+  std::vector<std::string> list;
+  std::vector<FileInfo> infos = list_directory_file_info(path, depth);
+  std::transform(infos.cbegin(), infos.cend(), list.begin(), [](FileInfo const &info) { return info.path; });
+  return list;
+}
+
+std::vector<std::string> SdMmc::list_directory(std::string path, uint8_t depth) {
+  return this->list_directory(path.c_str(), depth);
+}
+
+std::vector<FileInfo> SdMmc::list_directory_file_info(const char *path, uint8_t depth) {
+  std::vector<FileInfo> list;
+  list_directory_file_info_rec(path, depth, list);
+  return list;
+}
+
+std::vector<FileInfo> SdMmc::list_directory_file_info(std::string path, uint8_t depth) {
+  return this->list_directory_file_info(path.c_str(), depth);
+}
+
+size_t SdMmc::file_size(const char *path) {
+  std::string absolut_path = build_path(path);
+  struct stat info;
+  size_t file_size = 0;
+  if (stat(absolut_path.c_str(), &info) < 0) {
+    ESP_LOGE(TAG, "Failed to stat file: %s", strerror(errno));
+    return -1;
+  }
+  return info.st_size;
+}
+
+bool SdMmc::is_directory(const char *path) {
+  std::string absolut_path = build_path(path);
+  DIR *dir = opendir(absolut_path.c_str());
+  if (dir) {
+    closedir(dir);
+  }
+  return dir != nullptr;
+}
+
+#ifdef USE_SENSOR
+void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
+  this->file_size_sensors_.emplace_back(sensor, path);
+}
+#endif
+
+void SdMmc::set_clk_pin(uint8_t pin) { this->clk_pin_ = pin; }
+
+void SdMmc::set_cmd_pin(uint8_t pin) { this->cmd_pin_ = pin; }
+
+void SdMmc::set_data0_pin(uint8_t pin) { this->data0_pin_ = pin; }
+
+void SdMmc::set_data1_pin(uint8_t pin) { this->data1_pin_ = pin; }
+
+void SdMmc::set_data2_pin(uint8_t pin) { this->data2_pin_ = pin; }
+
+void SdMmc::set_data3_pin(uint8_t pin) { this->data3_pin_ = pin; }
+
+void SdMmc::set_mode_1bit(bool b) { this->mode_1bit_ = b; }
+
+void SdMmc::set_power_ctrl_pin(GPIOPin *pin) { this->power_ctrl_pin_ = pin; }
+
+std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
+  switch (code) {
+    case ErrorCode::ERR_PIN_SETUP:
+      return "Failed to set pins";
+    case ErrorCode::ERR_MOUNT:
+      return "Failed to mount card";
+    case ErrorCode::ERR_NO_CARD:
+      return "No card found";
+    default:
+      return "Unknown error";
+  }
+}
+
+std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list) {
   ESP_LOGV(TAG, "Listing directory file info: %s\n", path);
   std::string absolut_path = build_path(path);
   DIR *dir = opendir(absolut_path.c_str());
@@ -213,26 +299,7 @@ std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uin
   return list;
 }
 
-bool SdMmc::is_directory(const char *path) {
-  std::string absolut_path = build_path(path);
-  DIR *dir = opendir(absolut_path.c_str());
-  if (dir) {
-    closedir(dir);
-  }
-  return dir != nullptr;
-}
-
-size_t SdMmc::file_size(const char *path) {
-  std::string absolut_path = build_path(path);
-  struct stat info;
-  size_t file_size = 0;
-  if (stat(absolut_path.c_str(), &info) < 0) {
-    ESP_LOGE(TAG, "Failed to stat file: %s", strerror(errno));
-    return -1;
-  }
-  return info.st_size;
-}
-
+#ifdef USE_ESP_IDF
 std::string SdMmc::sd_card_type() const {
   if (this->card_->is_sdio) {
     return "SDIO";
@@ -243,6 +310,7 @@ std::string SdMmc::sd_card_type() const {
   }
   return "UNKNOWN";
 }
+#endif
 
 void SdMmc::update_sensors() {
 #ifdef USE_SENSOR
