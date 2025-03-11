@@ -48,7 +48,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   }
 
   // Créer une réponse personnalisée
-  auto *response = request->beginChunkedResponse("audio/mpeg", [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+  auto *response = request->beginResponse("audio/mpeg", [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
     size_t bytes_read = fread(buffer, 1, maxLen, file);
     if (bytes_read == 0) {
       fclose(file);  // Fermer le fichier lorsque la lecture est terminée
