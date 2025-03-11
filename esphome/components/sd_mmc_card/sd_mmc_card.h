@@ -106,6 +106,10 @@ class SdMmc : public Component {
     return this->file_size(path.c_str());
   }
   
+  uint64_t get_used_space();
+  uint64_t get_total_space();
+  uint64_t get_free_space();
+
 #ifdef USE_SENSOR
   void add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
     this->file_size_sensors_.emplace_back(sensor, path);
