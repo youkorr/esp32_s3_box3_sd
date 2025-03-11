@@ -59,6 +59,76 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   request->send(response);
 }
 
+void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
+                    "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
+                    "<style>"
+                    "body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 20px; }"
+                    "h1 { color: #4CAF50; }"
+                    "h2 { color: #555; }"
+                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
+                    "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
+                    "th { background-color: #4CAF50; color: white; }"
+                    "tr:hover { background-color: #f5f5f5; }"
+                    ".download-btn { background-color: #4CAF50; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; }"
+                    ".download-btn:hover { background-color: #45a049; }"
+                    "a { color: #4CAF50; text-decoration: none; }"
+                    "a:hover { text-decoration: underline; }"
+                    "</style>"
+                    "</head><body>"
+                    "<h1>SD Card Content</h1><h2>Folder "));
+
+  response->print(path.c_str());
+  response->print(F("</h2>"));
+  response->print(F("<a href=\"/"));
+  response->print(this->url_prefix_.c_str());
+  response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
+  auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
+  for (auto const &entry : entries)
+    write_row(response, entry);
+
+  response->print(F("</tbody></table>"
+                    "<script>"
+                    "function download_file(path, filename) {"
+                    "fetch(path).then(response => response.blob())"
+                    ".then(blob => {"
+                    "const link = document.createElement('a');"
+                    "link.href = URL.createObjectURL(blob);"
+                    "link.download = filename;"
+                    "link.click();"
+                    "}).catch(console.error);"
+                    "} "
+                    "</script>"
+                    "</body></html>"));
+
+  request->send(response);
+}
+
+void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
+  std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
+  std::string file_name = Path::file_name(info.path);
+  response->print("<tr><td>");
+  if (info.is_directory) {
+    response->print("<a href=\"");
+    response->print(uri.c_str());
+    response->print("\">");
+    response->print(file_name.c_str());
+    response->print("</a>");
+  } else {
+    response->print(file_name.c_str());
+  }
+  response->print("</td><td>");
+  if (!info.is_directory && this->download_enabled_) {
+    response->print("<button class=\"download-btn\" onClick=\"download_file('");
+    response->print(uri.c_str());
+    response->print("','");
+    response->print(file_name.c_str());
+    response->print("')\">Download</button>");
+  }
+  response->print("</td></tr>");
+}
+
 }  // namespace sd_file_server
 }  // namespace esphome
 
