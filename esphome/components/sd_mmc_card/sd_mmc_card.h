@@ -64,8 +64,8 @@ class SdMmc : public Component {
   bool remove_directory(const char *path);
   std::vector<uint8_t> read_file(char const *path);
   std::vector<uint8_t> read_file(std::string const &path);
-  bool read_file_chunked(const char *path, std::function<void(const uint8_t *buffer, size_t len)> callback, size_t chunk_size = 512);
-  bool read_file_chunked(std::string const &path, std::function<void(const uint8_t *buffer, size_t len)> callback, size_t chunk_size = 512);
+  bool read_file_chunk(const char *path, uint8_t *buffer, size_t offset, size_t len);
+  bool read_file_chunk(std::string const &path, uint8_t *buffer, size_t offset, size_t len);
   bool is_directory(const char *path);
   bool is_directory(std::string const &path);
   std::vector<std::string> list_directory(const char *path, uint8_t depth);
