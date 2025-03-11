@@ -15,6 +15,29 @@ namespace sd_mmc_card {
 
 static const char *TAG = "sd_mmc_card_esp32_arduino";
 
+bool SdMmc::read_file_chunk(const char *path, uint8_t *buffer, size_t offset, size_t len) {
+  File file = SD_MMC.open(path);
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file for reading");
+    return false;
+  }
+
+  if (!file.seek(offset)) {
+    ESP_LOGE(TAG, "Failed to seek to position %zu", offset);
+    file.close();
+    return false;
+  }
+
+  size_t bytesRead = file.read(buffer, len);
+  file.close();
+  
+  if (bytesRead != len) {
+    ESP_LOGE(TAG, "Failed to read %zu bytes (read %zu)", len, bytesRead);
+    return false;
+  }
+
+  return true;
+}
 void SdMmc::setup() {
   // Enable SDCard power
   if (SDCARD_PWR_CTRL >= 0) {
