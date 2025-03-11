@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
+#include <cstdio>
 
 namespace esphome {
 namespace sd_file_server {
@@ -47,8 +48,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Créer un flux de réponse
-  auto *response = request->beginResponseStream("audio/mpeg");
+  // Créer une réponse HTTP avec ESP-IDF
+  auto *response = request->beginResponse_P(200, "audio/mpeg");
 
   // Lire et envoyer les données par morceaux
   const size_t chunk_size = 4096;
