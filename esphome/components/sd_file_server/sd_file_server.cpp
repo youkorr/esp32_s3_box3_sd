@@ -69,7 +69,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
   // Ajouter un en-tête Content-Disposition pour forcer le téléchargement
   std::string file_name = Path::file_name(path);
-  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+  std::string content_disposition = "attachment; filename=\"" + file_name + "\"";
+  response->addHeader("Content-Disposition", content_disposition.c_str());
 
   // Lire et envoyer les données par morceaux
   const size_t chunk_size = 4096;
@@ -77,7 +78,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t bytes_read;
 
   while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
-    response->write(buffer, bytes_read);  // Utilisation de write pour envoyer les données
+    response->print(reinterpret_cast<const char*>(buffer), bytes_read);  // Utilisation de print pour envoyer les données
   }
 
   // Fermer le fichier
