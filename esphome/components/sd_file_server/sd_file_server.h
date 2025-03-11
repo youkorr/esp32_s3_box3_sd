@@ -20,9 +20,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void set_url_prefix(std::string const &);
   void set_root_path(std::string const &);
   void set_sd_mmc_card(sd_mmc_card::SdMmc *);
-  void set_deletion_enabled(bool);
   void set_download_enabled(bool);
-  void set_upload_enabled(bool);
 
  protected:
   web_server_base::WebServerBase *base_;
@@ -30,9 +28,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
 
   std::string url_prefix_;
   std::string root_path_;
-  bool deletion_enabled_;
   bool download_enabled_;
-  bool upload_enabled_;
 
   std::string build_prefix() const;
   std::string extract_path_from_url(std::string const &) const;
@@ -40,7 +36,6 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const;
   void handle_index(AsyncWebServerRequest *, std::string const &) const;
   void handle_get(AsyncWebServerRequest *) const;
-  void handle_delete(AsyncWebServerRequest *);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
 };
 
