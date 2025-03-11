@@ -76,6 +76,41 @@ bool SdMmc::read_file_chunk(const char *path, uint8_t *buffer, size_t offset, si
   return true;
 }
 
+bool SdMmc::read_file_by_chunks(const char *path, void (*callback)(const uint8_t *, size_t), size_t chunk_size) {
+  File file = SD_MMC.open(path);
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file for reading");
+    return false;
+  }
+
+  size_t fileSize = file.size();
+  file.close();
+
+  if (fileSize == 0) {
+    ESP_LOGW(TAG, "File is empty");
+    return true;
+  }
+
+  size_t offset = 0;
+  uint8_t buffer[chunk_size];
+
+  while (offset < fileSize) {
+    size_t remaining = fileSize - offset;
+    size_t chunk_len = (remaining < chunk_size) ? remaining : chunk_size;
+
+    if (!read_file_chunk(path, buffer, offset, chunk_len)) {
+      ESP_LOGE(TAG, "Error reading chunk starting at offset %zu", offset);
+      return false;
+    }
+
+    callback(buffer, chunk_len);
+
+    offset += chunk_len;
+  }
+
+  return true;
+}
+
 std::vector<uint8_t> SdMmc::read_file(const char *path) {
   std::vector<uint8_t> data;
   File file = SD_MMC.open(path);
