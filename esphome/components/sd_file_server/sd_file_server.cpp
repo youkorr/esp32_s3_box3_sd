@@ -10,7 +10,9 @@ static const char *TAG = "sd_file_server";
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
+void SDFileServer::setup() {
+  this->base_->add_handler(this);
+}
 
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
@@ -33,13 +35,21 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   }
 }
 
-void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
+void SDFileServer::set_url_prefix(std::string const &prefix) {
+  this->url_prefix_ = prefix;
+}
 
-void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = path; }
+void SDFileServer::set_root_path(std::string const &path) {
+  this->root_path_ = path;
+}
 
-void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
+void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) {
+  this->sd_mmc_card_ = card;
+}
 
-void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = allow; }
+void SDFileServer::set_download_enabled(bool allow) {
+  this->download_enabled_ = allow;
+}
 
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
@@ -129,18 +139,23 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  auto file = this->sd_mmc_card_->read_file(path);
-  if (file.size() == 0) {
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+  FILE *file = fopen(path.c_str(), "rb");
+  if (!file) {
+    request->send(401, "application/json", "{ \"error\": \"failed to open file\" }");
     return;
   }
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
-#else
-  auto *response = request->beginResponseStream("application/octet", file.size());
-  response->write(file.data(), file.size());
-#endif
 
+  const size_t chunk_size = 4096;
+  uint8_t buffer[chunk_size];
+
+  auto *response = request->beginResponseStream("audio/mpeg");
+
+  size_t bytes_read;
+  while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
+    response->write(buffer, bytes_read);
+  }
+
+  fclose(file);
   request->send(response);
 }
 
