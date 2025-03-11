@@ -12,188 +12,101 @@
 
 #ifdef USE_ESP_IDF
 #include "sdmmc_cmd.h"
-#include "ff.h"
-#include "diskio.h"
 #endif
 
 namespace esphome {
 namespace sd_mmc_card {
 
-enum MemoryUnits : short { Byte = 0, KiloByte = 1, MegaByte = 2, GigaByte = 3, TeraByte = 4, PetaByte = 5 };
+enum class MemoryUnits { BYTES, KILOBYTES, MEGABYTES, GIGABYTES };
 
-#ifdef USE_SENSOR
-struct FileSizeSensor {
-  sensor::Sensor *sensor{nullptr};
-  std::string path;
-
-  FileSizeSensor() = default;
-  FileSizeSensor(sensor::Sensor *sensor, std::string const &path) : sensor(sensor), path(path) {}
+enum class ErrorCode {
+  NONE = 0,
+  ERR_PIN_SETUP,
+  ERR_MOUNT,
+  ERR_NO_CARD,
 };
-#endif
 
 struct FileInfo {
   std::string path;
   size_t size;
   bool is_directory;
-
-  FileInfo(std::string const &path, size_t size, bool is_directory)
-      : path(path), size(size), is_directory(is_directory) {}
+  FileInfo(std::string const &path, size_t size, bool is_directory) 
+    : path(path), size(size), is_directory(is_directory) {}
 };
 
-class SdMmc : public Component {
 #ifdef USE_SENSOR
-  SUB_SENSOR(used_space)
-  SUB_SENSOR(total_space)
-  SUB_SENSOR(free_space)
-#endif
-#ifdef USE_TEXT_SENSOR
-  SUB_TEXT_SENSOR(sd_card_type)
-#endif
+class FileSizeSensor {
  public:
-  enum ErrorCode {
-    ERR_PIN_SETUP,
-    ERR_MOUNT,
-    ERR_NO_CARD,
-  };
+  FileSizeSensor(sensor::Sensor *sensor, std::string const &path) 
+    : sensor(sensor), path(path) {}
+  sensor::Sensor *sensor;
+  std::string path;
+};
+#endif
+
+class SdMmc : public Component {
+ public:
   void setup() override;
   void loop() override;
   void dump_config() override;
-  void write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode);
+
   void write_file(const char *path, const uint8_t *buffer, size_t len);
   void append_file(const char *path, const uint8_t *buffer, size_t len);
-  bool delete_file(const char *path);
-  bool delete_file(std::string const &path);
-  bool create_directory(const char *path);
-  bool remove_directory(const char *path);
-  std::vector<uint8_t> read_file(char const *path);
-  std::vector<uint8_t> read_file(std::string const &path);
-  bool is_directory(const char *path);
-  bool is_directory(std::string const &path);
-  std::vector<std::string> list_directory(const char *path, uint8_t depth);
-  std::vector<std::string> list_directory(std::string path, uint8_t depth);
-  std::vector<FileInfo> list_directory_file_info(const char *path, uint8_t depth);
-  std::vector<FileInfo> list_directory_file_info(std::string path, uint8_t depth);
-  size_t file_size(const char *path);
+  std::vector<std::string> list_directory(const char *path, uint8_t depth = 0);
+  std::vector<std::string> list_directory(std::string path, uint8_t depth = 0);
+  std::vector<FileInfo> list_directory_file_info(const char *path, uint8_t depth = 0);
+  std::vector<FileInfo> list_directory_file_info(std::string path, uint8_t depth = 0);
   size_t file_size(std::string const &path);
+  size_t file_size(const char *path);
+  bool is_directory(std::string const &path);
+  bool is_directory(const char *path);
+  bool delete_file(std::string const &path);
+  bool delete_file(const char *path);
+  std::vector<uint8_t> read_file(std::string const &path);
+  std::vector<uint8_t> read_file(const char *path);
+  bool read_file_chunked(const char *path, std::function<bool(uint8_t *, size_t, size_t)> callback, size_t chunk_size = 512);
+
+  void set_clk_pin(uint8_t pin);
+  void set_cmd_pin(uint8_t pin);
+  void set_data0_pin(uint8_t pin);
+  void set_data1_pin(uint8_t pin);
+  void set_data2_pin(uint8_t pin);
+  void set_data3_pin(uint8_t pin);
+  void set_mode_1bit(bool b);
+
 #ifdef USE_SENSOR
-  void add_file_size_sensor(sensor::Sensor *, std::string const &path);
+  void add_file_size_sensor(sensor::Sensor *sensor, std::string const &path);
 #endif
 
-  void set_clk_pin(uint8_t);
-  void set_cmd_pin(uint8_t);
-  void set_data0_pin(uint8_t);
-  void set_data1_pin(uint8_t);
-  void set_data2_pin(uint8_t);
-  void set_data3_pin(uint8_t);
-  void set_mode_1bit(bool);
-  void set_power_ctrl_pin(GPIOPin *);
-
-  // Nouvelle fonction pour la lecture par morceaux
-  void read_file_by_chunks(const char *path, size_t chunk_size, void (*callback)(const uint8_t *, size_t));
+  static std::string error_code_to_string(ErrorCode code);
 
  protected:
-  ErrorCode init_error_;
+  void write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode);
+  void list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list);
+  std::string build_path(const char *path);
+
   uint8_t clk_pin_;
   uint8_t cmd_pin_;
   uint8_t data0_pin_;
   uint8_t data1_pin_;
   uint8_t data2_pin_;
   uint8_t data3_pin_;
-  bool mode_1bit_;
-  GPIOPin *power_ctrl_pin_{nullptr};
+  bool mode_1bit_ = false;
+  ErrorCode init_error_ = ErrorCode::NONE;
 
-#ifdef USE_ESP_IDF
-  sdmmc_card_t *card_;
-#endif
 #ifdef USE_SENSOR
-  std::vector<FileSizeSensor> file_size_sensors_{};
+  sensor::Sensor *used_space_sensor_{nullptr};
+  sensor::Sensor *total_space_sensor_{nullptr};
+  sensor::Sensor *free_space_sensor_{nullptr};
+  std::vector<FileSizeSensor> file_size_sensors_;
 #endif
-  void update_sensors();
-#ifdef USE_ESP32_FRAMEWORK_ARDUINO
-  std::string sd_card_type_to_string(int) const;
+
+#ifdef USE_TEXT_SENSOR
+  text_sensor::TextSensor *sd_card_type_text_sensor_{nullptr};
 #endif
-#ifdef USE_ESP_IDF
-  std::string sd_card_type() const;
-#endif
-  std::vector<FileInfo> &list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list);
-  static std::string error_code_to_string(ErrorCode);
 };
 
-template<typename... Ts> class SdMmcWriteFileAction : public Action<Ts...> {
- public:
-  SdMmcWriteFileAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-  TEMPLATABLE_VALUE(std::vector<uint8_t>, data)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    auto buffer = this->data_.value(x...);
-    this->parent_->write_file(path.c_str(), buffer.data(), buffer.size());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcAppendFileAction : public Action<Ts...> {
- public:
-  SdMmcAppendFileAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-  TEMPLATABLE_VALUE(std::vector<uint8_t>, data)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    auto buffer = this->data_.value(x...);
-    this->parent_->append_file(path.c_str(), buffer.data(), buffer.size());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcCreateDirectoryAction : public Action<Ts...> {
- public:
-  SdMmcCreateDirectoryAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    this->parent_->create_directory(path.c_str());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcRemoveDirectoryAction : public Action<Ts...> {
- public:
-  SdMmcRemoveDirectoryAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    this->parent_->remove_directory(path.c_str());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcDeleteFileAction : public Action<Ts...> {
- public:
-  SdMmcDeleteFileAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    this->parent_->delete_file(path.c_str());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-long double convertBytes(uint64_t, MemoryUnits);
+long double convertBytes(uint64_t value, MemoryUnits unit);
 
 }  // namespace sd_mmc_card
 }  // namespace esphome
