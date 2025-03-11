@@ -5,6 +5,9 @@
 #include "math.h"
 #include "esphome/core/log.h"
 
+#include "ff.h"
+#include "diskio.h"
+
 namespace esphome {
 namespace sd_mmc_card {
 
@@ -131,6 +134,23 @@ long double convertBytes(uint64_t value, MemoryUnits unit) {
 
 FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
     : path(path), size(size), is_directory(is_directory) {}
+
+void SdMmc::read_file_by_chunks(const char *path, size_t chunk_size, void (*callback)(const uint8_t *, size_t)) {
+  FIL file;
+  if (f_open(&file, path, FA_READ) != FR_OK) {
+    ESP_LOGE(TAG, "Failed to open file: %s", path);
+    return;
+  }
+
+  uint8_t buffer[chunk_size];
+  UINT bytesRead;
+
+  while (f_read(&file, buffer, chunk_size, &bytesRead) == FR_OK && bytesRead > 0) {
+    callback(buffer, bytesRead);
+  }
+
+  f_close(&file);
+}
 
 }  // namespace sd_mmc_card
 }  // namespace esphome
