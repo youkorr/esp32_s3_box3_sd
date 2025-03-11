@@ -84,8 +84,7 @@ void SdMmc::dump_config() {
 }
 
 bool SdMmc::read_file_chunk(const char *path, uint8_t *buffer, size_t offset, size_t len) {
-  std::string absolut_path = build_path(path);
-  FILE *file = fopen(absolut_path.c_str(), "rb");
+  FILE *file = fopen(path, "rb");
   if (!file) {
     ESP_LOGE(TAG, "Failed to open file for reading");
     return false;
@@ -110,8 +109,7 @@ bool SdMmc::read_file_chunk(const char *path, uint8_t *buffer, size_t offset, si
 
 std::vector<uint8_t> SdMmc::read_file(const char *path) {
   std::vector<uint8_t> data;
-  std::string absolut_path = build_path(path);
-  FILE *file = fopen(absolut_path.c_str(), "rb");
+  FILE *file = fopen(path, "rb");
   if (!file) {
     ESP_LOGE(TAG, "Failed to open file for reading");
     return data;
@@ -127,9 +125,8 @@ std::vector<uint8_t> SdMmc::read_file(const char *path) {
   return data;
 }
 
-void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
-  std::string absolut_path = build_path(path);
-  FILE *file = fopen(absolut_path.c_str(), "wb");
+void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode) {
+  FILE *file = fopen(path, mode);
   if (!file) {
     ESP_LOGE(TAG, "Failed to open file for writing");
     return;
@@ -143,25 +140,8 @@ void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
   }
 }
 
-void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
-  std::string absolut_path = build_path(path);
-  FILE *file = fopen(absolut_path.c_str(), "ab");
-  if (!file) {
-    ESP_LOGE(TAG, "Failed to open file for appending");
-    return;
-  }
-
-  size_t bytesWritten = fwrite(buffer, 1, len, file);
-  fclose(file);
-
-  if (bytesWritten != len) {
-    ESP_LOGE(TAG, "Failed to append complete data (wrote %zu/%zu bytes)", bytesWritten, len);
-  }
-}
-
 bool SdMmc::delete_file(const char *path) {
-  std::string absolut_path = build_path(path);
-  if (remove(absolut_path.c_str()) != 0) {
+  if (remove(path) != 0) {
     ESP_LOGE(TAG, "Failed to delete file");
     return false;
   }
@@ -169,8 +149,7 @@ bool SdMmc::delete_file(const char *path) {
 }
 
 bool SdMmc::create_directory(const char *path) {
-  std::string absolut_path = build_path(path);
-  if (mkdir(absolut_path.c_str(), 0755) != 0) {
+  if (mkdir(path, 0755) != 0) {
     ESP_LOGE(TAG, "Failed to create directory");
     return false;
   }
@@ -178,8 +157,7 @@ bool SdMmc::create_directory(const char *path) {
 }
 
 bool SdMmc::remove_directory(const char *path) {
-  std::string absolut_path = build_path(path);
-  if (rmdir(absolut_path.c_str()) != 0) {
+  if (rmdir(path) != 0) {
     ESP_LOGE(TAG, "Failed to remove directory");
     return false;
   }
@@ -187,9 +165,8 @@ bool SdMmc::remove_directory(const char *path) {
 }
 
 bool SdMmc::is_directory(const char *path) {
-  std::string absolut_path = build_path(path);
   struct stat st;
-  if (stat(absolut_path.c_str(), &st) != 0) {
+  if (stat(path, &st) != 0) {
     return false;
   }
   return S_ISDIR(st.st_mode);
@@ -197,8 +174,7 @@ bool SdMmc::is_directory(const char *path) {
 
 std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
   std::vector<std::string> result;
-  std::string absolut_path = build_path(path);
-  DIR *dir = opendir(absolut_path.c_str());
+  DIR *dir = opendir(path);
   if (!dir) {
     return result;
   }
@@ -212,7 +188,7 @@ std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) 
 
     result.push_back(entry_name);
     if (entry->d_type == DT_DIR && depth > 0) {
-      std::string subdir_path = absolut_path + "/" + entry_name;
+      std::string subdir_path = std::string(path) + "/" + entry_name;
       std::vector<std::string> subdir = this->list_directory(subdir_path.c_str(), depth - 1);
       result.insert(result.end(), subdir.begin(), subdir.end());
     }
@@ -229,8 +205,7 @@ std::vector<FileInfo> SdMmc::list_directory_file_info(const char *path, uint8_t 
 }
 
 std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list) {
-  std::string absolut_path = build_path(path);
-  DIR *dir = opendir(absolut_path.c_str());
+  DIR *dir = opendir(path);
   if (!dir) {
     return list;
   }
@@ -242,7 +217,7 @@ std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uin
       continue;
     }
 
-    std::string full_path = absolut_path + "/" + entry_name;
+    std::string full_path = std::string(path) + "/" + entry_name;
     struct stat st;
     if (stat(full_path.c_str(), &st) == 0) {
       list.emplace_back(entry_name, st.st_size, S_ISDIR(st.st_mode));
@@ -257,9 +232,8 @@ std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uin
 }
 
 size_t SdMmc::file_size(const char *path) {
-  std::string absolut_path = build_path(path);
   struct stat st;
-  if (stat(absolut_path.c_str(), &st) != 0) {
+  if (stat(path, &st) != 0) {
     return 0;
   }
   return st.st_size;
@@ -293,8 +267,8 @@ void SdMmc::update_sensors() {
 #endif
 
 #ifdef USE_TEXT_SENSOR
-  if (this->sd_card_type_sensor_ != nullptr) {
-    this->sd_card_type_sensor_->publish_state(this->sd_card_type());
+  if (this->sd_card_type_text_sensor_ != nullptr) {
+    this->sd_card_type_text_sensor_->publish_state(this->sd_card_type());
   }
 #endif
 }
@@ -311,15 +285,6 @@ uint64_t SdMmc::get_free_space() {
   }
 
   return (uint64_t)fre_clust * fs->csize * this->card_->csd.sector_size;
-}
-
-std::string SdMmc::error_code_to_string(ErrorCode error) {
-  switch (error) {
-    case ERR_PIN_SETUP: return "Pin setup error";
-    case ERR_MOUNT: return "Mount error";
-    case ERR_NO_CARD: return "No card present";
-    default: return "No error";
-  }
 }
 
 }  // namespace sd_mmc_card
