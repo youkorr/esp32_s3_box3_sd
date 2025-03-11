@@ -1,8 +1,7 @@
 #include "sd_mmc_card.h"
 
 #include <algorithm>
-
-#include "math.h"
+#include <math.h>
 #include "esphome/core/log.h"
 
 namespace esphome {
@@ -10,127 +9,157 @@ namespace sd_mmc_card {
 
 static const char *TAG = "sd_mmc_card";
 
-#ifdef USE_SENSOR
-FileSizeSensor::FileSizeSensor(sensor::Sensor *sensor, std::string const &path) : sensor(sensor), path(path) {}
-#endif
-
-void SdMmc::loop() {}
-
-void SdMmc::dump_config() {
-  ESP_LOGCONFIG(TAG, "SD MMC Component");
-  ESP_LOGCONFIG(TAG, "  Mode 1 bit: %s", TRUEFALSE(this->mode_1bit_));
-  ESP_LOGCONFIG(TAG, "  CLK Pin: %d", this->clk_pin_);
-  ESP_LOGCONFIG(TAG, "  CMD Pin: %d", this->cmd_pin_);
-  ESP_LOGCONFIG(TAG, "  DATA0 Pin: %d", this->data0_pin_);
-  if (!this->mode_1bit_) {
-    ESP_LOGCONFIG(TAG, "  DATA1 Pin: %d", this->data1_pin_);
-    ESP_LOGCONFIG(TAG, "  DATA2 Pin: %d", this->data2_pin_);
-    ESP_LOGCONFIG(TAG, "  DATA3 Pin: %d", this->data3_pin_);
+void SdMmc::setup() {
+  if (this->power_ctrl_pin_ != -1) {
+    pinMode(this->power_ctrl_pin_, OUTPUT);
+    digitalWrite(this->power_ctrl_pin_, HIGH);
   }
 
-  if (this->power_ctrl_pin_ != nullptr) {
-    LOG_PIN("  Power Ctrl Pin: ", this->power_ctrl_pin_);
-  }
+  this->init_error_ = NO_ERROR;
+}
 
-#ifdef USE_SENSOR
-  LOG_SENSOR("  ", "Used space", this->used_space_sensor_);
-  LOG_SENSOR("  ", "Total space", this->total_space_sensor_);
-  LOG_SENSOR("  ", "Free space", this->free_space_sensor_);
-  for (auto &sensor : this->file_size_sensors_) {
-    if (sensor.sensor != nullptr)
-      LOG_SENSOR("  ", "File size", sensor.sensor);
-  }
-#endif
-#ifdef USE_TEXT_SENSOR
-  LOG_TEXT_SENSOR("  ", "SD Card Type", this->sd_card_type_text_sensor_);
-#endif
-
-  if (this->is_failed()) {
-    ESP_LOGE(TAG, "Setup failed : %s", SdMmc::error_code_to_string(this->init_error_).c_str());
+void SdMmc::loop() {
+  if (this->init_error_ != NO_ERROR) {
     return;
   }
+
+  this->update_sensors();
 }
 
-void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
-  ESP_LOGV(TAG, "Writing to file: %s", path);
-  this->write_file(path, buffer, len, "w");
+void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode) {
+  FILE *file = fopen(path, mode);
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file for writing");
+    return;
+  }
+
+  size_t bytes_written = fwrite(buffer, 1, len, file);
+  fclose(file);
+
+  if (bytes_written != len) {
+    ESP_LOGE(TAG, "Failed to write complete file (wrote %zu/%zu bytes)", bytes_written, len);
+  }
 }
 
-void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
-  ESP_LOGV(TAG, "Appending to file: %s", path);
-  this->write_file(path, buffer, len, "a");
+bool SdMmc::delete_file(const char *path) {
+  if (remove(path) != 0) {
+    ESP_LOGE(TAG, "Failed to delete file");
+    return false;
+  }
+  return true;
+}
+
+bool SdMmc::create_directory(const char *path) {
+  if (mkdir(path, 0755) != 0) {
+    ESP_LOGE(TAG, "Failed to create directory");
+    return false;
+  }
+  return true;
+}
+
+bool SdMmc::remove_directory(const char *path) {
+  if (rmdir(path) != 0) {
+    ESP_LOGE(TAG, "Failed to remove directory");
+    return false;
+  }
+  return true;
+}
+
+bool SdMmc::is_directory(const char *path) {
+  struct stat st;
+  if (stat(path, &st) != 0) {
+    return false;
+  }
+  return S_ISDIR(st.st_mode);
 }
 
 std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
-  std::vector<std::string> list;
-  std::vector<FileInfo> infos = list_directory_file_info(path, depth);
-  std::transform(infos.cbegin(), infos.cend(), list.begin(), [](FileInfo const &info) { return info.path; });
-  return list;
-}
+  std::vector<std::string> result;
+  DIR *dir = opendir(path);
+  if (!dir) {
+    return result;
+  }
 
-std::vector<std::string> SdMmc::list_directory(std::string path, uint8_t depth) {
-  return this->list_directory(path.c_str(), depth);
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    std::string entry_name = entry->d_name;
+    if (entry_name == "." || entry_name == "..") {
+      continue;
+    }
+
+    result.push_back(entry_name);
+    if (entry->d_type == DT_DIR && depth > 0) {
+      std::string subdir_path = std::string(path) + "/" + entry_name;
+      std::vector<std::string> subdir = this->list_directory(subdir_path.c_str(), depth - 1);
+      result.insert(result.end(), subdir.begin(), subdir.end());
+    }
+  }
+
+  closedir(dir);
+  return result;
 }
 
 std::vector<FileInfo> SdMmc::list_directory_file_info(const char *path, uint8_t depth) {
-  std::vector<FileInfo> list;
-  list_directory_file_info_rec(path, depth, list);
+  std::vector<FileInfo> result;
+  this->list_directory_file_info_rec(path, depth, result);
+  return result;
+}
+
+std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list) {
+  DIR *dir = opendir(path);
+  if (!dir) {
+    return list;
+  }
+
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    std::string entry_name = entry->d_name;
+    if (entry_name == "." || entry_name == "..") {
+      continue;
+    }
+
+    std::string full_path = std::string(path) + "/" + entry_name;
+    struct stat st;
+    if (stat(full_path.c_str(), &st) == 0) {
+      list.emplace_back(entry_name, st.st_size, S_ISDIR(st.st_mode));
+      if (S_ISDIR(st.st_mode) && depth > 0) {
+        this->list_directory_file_info_rec(full_path.c_str(), depth - 1, list);
+      }
+    }
+  }
+
+  closedir(dir);
   return list;
 }
 
-std::vector<FileInfo> SdMmc::list_directory_file_info(std::string path, uint8_t depth) {
-  return this->list_directory_file_info(path.c_str(), depth);
+size_t SdMmc::file_size(const char *path) {
+  struct stat st;
+  if (stat(path, &st) != 0) {
+    return 0;
+  }
+  return st.st_size;
 }
 
-size_t SdMmc::file_size(std::string const &path) { return this->file_size(path.c_str()); }
-
-bool SdMmc::is_directory(std::string const &path) { return this->is_directory(path.c_str()); }
-
-bool SdMmc::delete_file(std::string const &path) { return this->delete_file(path.c_str()); }
-
-std::vector<uint8_t> SdMmc::read_file(std::string const &path) { return this->read_file(path.c_str()); }
-
+void SdMmc::update_sensors() {
 #ifdef USE_SENSOR
-void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
-  this->file_size_sensors_.emplace_back(sensor, path);
-}
+  if (this->used_space_sensor_ != nullptr) {
+    this->used_space_sensor_->publish_state(this->get_used_space());
+  }
+  if (this->total_space_sensor_ != nullptr) {
+    this->total_space_sensor_->publish_state(this->get_total_space());
+  }
+  if (this->free_space_sensor_ != nullptr) {
+    this->free_space_sensor_->publish_state(this->get_free_space());
+  }
 #endif
 
-void SdMmc::set_clk_pin(uint8_t pin) { this->clk_pin_ = pin; }
-
-void SdMmc::set_cmd_pin(uint8_t pin) { this->cmd_pin_ = pin; }
-
-void SdMmc::set_data0_pin(uint8_t pin) { this->data0_pin_ = pin; }
-
-void SdMmc::set_data1_pin(uint8_t pin) { this->data1_pin_ = pin; }
-
-void SdMmc::set_data2_pin(uint8_t pin) { this->data2_pin_ = pin; }
-
-void SdMmc::set_data3_pin(uint8_t pin) { this->data3_pin_ = pin; }
-
-void SdMmc::set_mode_1bit(bool b) { this->mode_1bit_ = b; }
-
-void SdMmc::set_power_ctrl_pin(GPIOPin *pin) { this->power_ctrl_pin_ = pin; }
-
-std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
-  switch (code) {
-    case ErrorCode::ERR_PIN_SETUP:
-      return "Failed to set pins";
-    case ErrorCode::ERR_MOUNT:
-      return "Failed to mount card";
-    case ErrorCode::ERR_NO_CARD:
-      return "No card found";
-    default:
-      return "Unknown error";
+#ifdef USE_TEXT_SENSOR
+  if (this->sd_card_type_sensor_ != nullptr) {
+    this->sd_card_type_sensor_->publish_state(this->get_sd_card_type());
   }
+#endif
 }
-
-long double convertBytes(uint64_t value, MemoryUnits unit) {
-  return value * 1.0 / pow(1024, static_cast<uint64_t>(unit));
-}
-
-FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
-    : path(path), size(size), is_directory(is_directory) {}
 
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
