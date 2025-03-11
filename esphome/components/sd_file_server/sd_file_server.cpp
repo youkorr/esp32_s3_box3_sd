@@ -48,23 +48,40 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Déterminer la taille du fichier pour l'en-tête Content-Length
-  fseek(file, 0, SEEK_END);
-  size_t file_size = ftell(file);
-  fseek(file, 0, SEEK_SET);
+  // Déterminer le type MIME en fonction de l'extension du fichier
+  std::string mime_type = "application/octet-stream";  // Type par défaut
+  size_t dot_pos = path.find_last_of('.');
+  if (dot_pos != std::string::npos) {
+    std::string extension = path.substr(dot_pos + 1);
+    if (extension == "mp3") {
+      mime_type = "audio/mpeg";
+    } else if (extension == "txt") {
+      mime_type = "text/plain";
+    } else if (extension == "jpg" || extension == "jpeg") {
+      mime_type = "image/jpeg";
+    } else if (extension == "png") {
+      mime_type = "image/png";
+    }
+  }
 
-  // Utiliser beginResponse avec callbacks
-  auto *response = request->beginResponse("audio/mpeg", file_size, [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-    return fread(buffer, 1, maxLen, file);
-  }, [file]() {
-    // Callback appelé quand la réponse est terminée pour fermer le fichier
-    fclose(file);
-  });
+  // Créer un flux de réponse
+  auto *response = request->beginResponseStream(mime_type.c_str());
 
-  // Ajouter des en-têtes pour indiquer que c'est un téléchargement
-  std::string filename = Path::file_name(path);
-  std::string content_disposition = "attachment; filename=\"" + filename + "\"";
-  response->addHeader("Content-Disposition", content_disposition.c_str());
+  // Ajouter un en-tête Content-Disposition pour forcer le téléchargement
+  std::string file_name = Path::file_name(path);
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+
+  // Lire et envoyer les données par morceaux
+  const size_t chunk_size = 4096;
+  uint8_t buffer[chunk_size];
+  size_t bytes_read;
+
+  while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
+    response->write(buffer, bytes_read);  // Utilisation de write pour envoyer les données
+  }
+
+  // Fermer le fichier
+  fclose(file);
 
   // Envoyer la réponse
   request->send(response);
