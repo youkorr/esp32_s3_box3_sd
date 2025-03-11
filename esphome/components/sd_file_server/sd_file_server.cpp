@@ -9,7 +9,8 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
-SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
+SDFileServer::SDFileServer(web_server_base::WebServerBase *base) 
+    : base_(base), sd_mmc_card_(nullptr), download_enabled_(false) {}
 
 void SDFileServer::setup() {
   this->base_->add_handler(this);
@@ -60,8 +61,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
   auto *response = request->beginResponseStream(mime_type.c_str());
   std::string file_name = Path::file_name(path);
-  
-  // Correction clé : Conversion explicite avec .c_str() <button class="citation-flag" data-index="5">
   response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
 
   const size_t chunk_size = 4096;
@@ -69,7 +68,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t bytes_read;
 
   while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
-    // Gestion des données binaires via std::string <button class="citation-flag" data-index="1"><button class="citation-flag" data-index="3">
     response->print(std::string(reinterpret_cast<const char*>(buffer), bytes_read));
   }
 
@@ -147,9 +145,60 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   response->print("</td></tr>");
 }
 
+// Implémentations des setters
+void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) {
+  this->sd_mmc_card_ = card;
+}
+
+void SDFileServer::set_url_prefix(const std::string &prefix) {
+  this->url_prefix_ = prefix;
+}
+
+void SDFileServer::set_root_path(const std::string &path) {
+  this->root_path_ = path;
+}
+
+void SDFileServer::set_download_enabled(bool allow) {
+  this->download_enabled_ = allow;
+}
+
+std::string SDFileServer::build_prefix() const {
+  return "/" + this->url_prefix_;
+}
+
+void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
+  std::string url = request->url().c_str();
+  if (url == this->build_prefix()) {
+    this->handle_index(request, this->root_path_);
+  } else {
+    std::string file_path = this->build_absolute_path(url);
+    this->handle_download(request, file_path);
+  }
+}
+
+std::string SDFileServer::build_absolute_path(std::string relative_path) const {
+  return this->root_path_ + relative_path.substr(this->url_prefix_.length());
+}
+
+// Méthodes utilitaires de Path
+std::string Path::file_name(const std::string &path) {
+  size_t pos = path.find_last_of(separator);
+  return (pos == std::string::npos) ? path : path.substr(pos + 1);
+}
+
+std::string Path::join(const std::string &first, const std::string &second) {
+  return first + separator + second;
+}
+
+std::string Path::remove_root_path(std::string path, const std::string &root) {
+  if (path.find(root) == 0) {
+    path.erase(0, root.length());
+  }
+  return path;
+}
+
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
