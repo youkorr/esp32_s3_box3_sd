@@ -47,15 +47,22 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Créer une réponse personnalisée
-  auto *response = request->beginResponse("audio/mpeg", [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-    size_t bytes_read = fread(buffer, 1, maxLen, file);
-    if (bytes_read == 0) {
-      fclose(file);  // Fermer le fichier lorsque la lecture est terminée
-    }
-    return bytes_read;
-  });
+  // Créer un flux de réponse
+  auto *response = request->beginResponseStream("audio/mpeg");
 
+  // Lire et envoyer les données par morceaux
+  const size_t chunk_size = 4096;
+  uint8_t buffer[chunk_size];
+  size_t bytes_read;
+
+  while ((bytes_read = fread(buffer, 1, chunk_size, file)) > 0) {
+    response->write(buffer, bytes_read);
+  }
+
+  // Fermer le fichier
+  fclose(file);
+
+  // Envoyer la réponse
   request->send(response);
 }
 
@@ -131,7 +138,6 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
