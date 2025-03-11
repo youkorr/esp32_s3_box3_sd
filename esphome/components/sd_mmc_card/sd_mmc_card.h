@@ -12,6 +12,8 @@
 
 #ifdef USE_ESP_IDF
 #include "sdmmc_cmd.h"
+#include "ff.h"
+#include "diskio.h"
 #endif
 
 namespace esphome {
@@ -25,7 +27,7 @@ struct FileSizeSensor {
   std::string path;
 
   FileSizeSensor() = default;
-  FileSizeSensor(sensor::Sensor *, std::string const &path);
+  FileSizeSensor(sensor::Sensor *sensor, std::string const &path) : sensor(sensor), path(path) {}
 };
 #endif
 
@@ -34,7 +36,8 @@ struct FileInfo {
   size_t size;
   bool is_directory;
 
-  FileInfo(std::string const &, size_t, bool);
+  FileInfo(std::string const &path, size_t size, bool is_directory)
+      : path(path), size(size), is_directory(is_directory) {}
 };
 
 class SdMmc : public Component {
@@ -84,6 +87,9 @@ class SdMmc : public Component {
   void set_data3_pin(uint8_t);
   void set_mode_1bit(bool);
   void set_power_ctrl_pin(GPIOPin *);
+
+  // Nouvelle fonction pour la lecture par morceaux
+  void read_file_by_chunks(const char *path, size_t chunk_size, void (*callback)(const uint8_t *, size_t));
 
  protected:
   ErrorCode init_error_;
