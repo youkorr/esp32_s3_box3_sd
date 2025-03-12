@@ -37,17 +37,17 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
-      std::string url = request->url().c_str();
-      if (url == "/sd_card.png") {
-        handle_static_image(request, sd_card_png, sd_card_png_len, "image/png");
-        return;
-      } else if (url == "/download.png") {
-        handle_static_image(request, download_png, download_png_len, "image/png");
-        return;
-      } else if (url == "/delete.png") {
-        handle_static_image(request, delete_png, delete_png_len, "image/png");
-        return;
-      }
+       std::string url = request->url().c_str();
+            if (url == "/sd_card.png") {
+                handle_static_image(request, sd_card_png, sd_card_png_len, "image/png");
+                return;
+            } else if (url == "/download.png") {
+                handle_static_image(request, download_png, download_png_len, "image/png");
+                return;
+            } else if (url == "/delete.png") {
+                handle_static_image(request, delete_png, delete_png_len, "image/png");
+                return;
+            }
       this->handle_get(request);
       return;
     }
@@ -181,7 +181,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "link.click();"
                     "}).catch(console.error);"
                     "}"
-                    "function delete_file(path) {"
+                     "function delete_file(path) {"
                     "if (confirm('Are you sure you want to delete this file?')) {"
                     "fetch(path, { method: 'DELETE' })"
                     ".then(response => {"
@@ -214,12 +214,12 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
+    AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
         std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
         if (index >= file->size()) {
             return 0;
         }
-        size_t to_send = std::min(len, file->size() - index);
+        size_t to_send = std::min(maxLen, file->size() - index);
         memcpy(buffer, file->data() + index, to_send);
         return to_send;
     }, (void*)&file);
@@ -244,7 +244,7 @@ void SDFileServer::handle_static_image(AsyncWebServerRequest *request, const uin
                                      const char *content_type) const {
   AsyncWebServerResponse *response = request->beginResponse(content_type, len, [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
     const uint8_t *data = reinterpret_cast<const uint8_t *>(ctx);
-    size_t to_send = std::min(maxLen, size_t(sd_card_png_len) - index);
+    size_t to_send = std::min(maxLen, size_t(SDFileServer::sd_card_png_len) - index);
     memcpy(buffer, data + index, to_send);
     return to_send;
   }, (void*) data);
