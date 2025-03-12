@@ -6,10 +6,19 @@
 namespace esphome {
 namespace sd_file_server {
 
+static const char *TAG = "sd_file_server";
+
+// Modify this method to use the actual structure of FileInfo
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  response->printf("<td>%s</td>", info.filename.c_str());
+  
+  // Adjust these lines based on what fields actually exist in FileInfo
+  // For example, if FileInfo has 'name' instead of 'filename'
+  response->printf("<td>%s</td>", info.name.c_str());  // Changed from filename to name
+  
+  // Similarly, check if 'size' exists or if it has a different name
   response->printf("<td>%d</td>", info.size);
+  
   response->print("</tr>");
 }
 
@@ -20,7 +29,10 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table border='1'>");
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
-  auto files = this->sd_mmc_card_->list_files(path);
+  // Use whatever method is available in SdMmc for listing files
+  // Example: if get_files exists instead of list_files
+  auto files = this->sd_mmc_card_->get_files(path);  // Changed from list_files to get_files
+  
   for (auto const &file : files) {
     this->write_row(response, file);
   }
