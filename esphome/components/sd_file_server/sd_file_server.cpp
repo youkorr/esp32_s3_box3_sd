@@ -105,7 +105,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
     response->print(file_name.c_str());
     response->print("</a>");
   } else {
-    response->printf("%s (%s)", file_name.c_str(), file_type.c_str());
+      response->printf("%s (%s, %s)", file_name.c_str(), file_type.c_str(), format_file_size(info.size).c_str());
   }
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
@@ -277,6 +277,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
