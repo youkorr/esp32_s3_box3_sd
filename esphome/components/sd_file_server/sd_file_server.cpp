@@ -181,6 +181,10 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   request->send(response);
 }
 
+void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
+  request->send(501, "text/plain", "Deleting files is not yet supported");
+}
+
 std::string SDFileServer::build_prefix() const {
   if (this->url_prefix_.length() == 0 || this->url_prefix_.at(0) != '/')
     return "/" + this->url_prefix_;
@@ -233,6 +237,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 }
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
