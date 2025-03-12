@@ -284,7 +284,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   <div class="container">
     <h1>SD Card Files</h1>
     <div class="breadcrumb">
-      <a href="/">Home</a> > )"));
+      <a href="/">web_server_esphome</a> > <a href="/sd-card">sd-card</a> > 
 
   // Breadcrumb navigation
   std::string current_path = "/";
