@@ -24,6 +24,43 @@ std::string format_size(size_t size) {
   return std::string(buffer);
 }
 
+// Implementation of Path methods
+std::string Path::file_name(std::string const &path) {
+  size_t pos = path.rfind(Path::separator);
+  if (pos != std::string::npos) {
+    return path.substr(pos + 1);
+  }
+  return path;
+}
+
+bool Path::is_absolute(std::string const &path) {
+  return path.size() && path[0] == separator;
+}
+
+bool Path::trailing_slash(std::string const &path) {
+  return path.size() && path[path.length() - 1] == separator;
+}
+
+std::string Path::join(std::string const &first, std::string const &second) {
+  std::string result = first;
+  if (!trailing_slash(first) && !is_absolute(second)) {
+    result.push_back(separator);
+  }
+  if (trailing_slash(first) && is_absolute(second)) {
+    result.pop_back();
+  }
+  result.append(second);
+  return result;
+}
+
+std::string Path::remove_root_path(std::string path, std::string const &root) {
+  if (!str_startswith(path, root))
+    return path;
+  if (path.size() == root.size() || path.size() < 2)
+    return "/";
+  return path.erase(0, root.size());
+}
+
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { this->base_->add_handler(this); }
@@ -307,7 +344,6 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
