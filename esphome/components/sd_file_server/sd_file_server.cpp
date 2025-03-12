@@ -30,6 +30,10 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       this->handle_get(request);
       return;
     }
+    if (request->method() == HTTP_DELETE) {
+      this->handle_delete(request);
+      return;
+    }
   }
 }
 
@@ -68,15 +72,10 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 }
 
 void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
-
 void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = path; }
-
 void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
-
 void SDFileServer::set_deletion_enabled(bool allow) { this->deletion_enabled_ = allow; }
-
 void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = allow; }
-
 void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allow; }
 
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
@@ -232,11 +231,6 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
     return "/";
   return path.erase(0, root.size());
 }
-
-// Add empty definitions for set_deletion_enabled and set_upload_enabled
-void SDFileServer::set_deletion_enabled(bool allow) { this->deletion_enabled_ = allow; }
-void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allow; }
-
 }  // namespace sd_file_server
 }  // namespace esphome
 
