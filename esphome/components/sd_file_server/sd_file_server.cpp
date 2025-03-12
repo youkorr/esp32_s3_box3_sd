@@ -213,9 +213,18 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 #ifdef USE_ESP_IDF
-    request->send(200, "application/octet-stream", (const char*)file.data(), file.size());
+   AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file.size(), 
+    [file](uint8_t *buffer, size_t len, size_t index) -> size_t {
+      if (index >= file.size()) {
+        return 0;
+      }
+      size_t bytes_to_copy = std::min(len, file.size() - index);
+      memcpy(buffer, file.data() + index, bytes_to_copy);
+      return bytes_to_copy;
+    });
+  request->send(response);
 #else
-    auto *response = request->beginResponseStream("application/octet-stream");
+    AsyncWebServerResponse *response = request->beginResponseStream("application/octet-stream");
     response->write(file.data(), file.size());
     request->send(response);
 #endif
@@ -249,21 +258,27 @@ void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::strin
         return;
     }
 #ifdef USE_ESP_IDF
-    request->send(200, contentType.c_str(), (const char*)file.data(), file.size());
+  AsyncWebServerResponse *response = request->beginResponse(contentType.c_str(), file.size(), 
+    [file](uint8_t *buffer, size_t len, size_t index) -> size_t {
+      if (index >= file.size()) {
+        return 0;
+      }
+      size_t bytes_to_copy = std::min(len, file.size() - index);
+      memcpy(buffer, file.data() + index, bytes_to_copy);
+      return bytes_to_copy;
+    });
+  request->send(response);
 #else
-    AsyncWebServerResponse *response = request->beginResponse(contentType.c_str(), file.size(), [](uint8_t *buf, size_t maxLen, size_t index, void *ctx) -> size_t {
-        std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
-        size_t to_send = std::min(maxLen, file->size() - index);
-        memcpy(buf, file->data() + index, to_send);
-        return to_send;
-    }, (void*)&file);
+    AsyncWebServerResponse *response = request->beginResponseStream(contentType.c_str());
+    response->write(file.data(), file.size());
     request->send(response);
 #endif
 }
 
 bool SDFileServer::file_exists(const std::string& filename) const {
 #ifdef USE_ESP32
-  return SPIFFS.exists(filename.c_str());
+  fs::SPIFFSFS& spiffs = SPIFFS;
+  return spiffs.exists(filename.c_str());
 #else
   // Implement your file exists logic here
   // For example, assuming you're using SD_MMC library
