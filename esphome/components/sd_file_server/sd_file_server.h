@@ -42,8 +42,18 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void handle_get(AsyncWebServerRequest *) const;
   void handle_delete(AsyncWebServerRequest *);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
-  void handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const;
-  bool file_exists(const std::string& filename) const;
+
+ private:
+  void handle_static_image(AsyncWebServerRequest *request, const uint8_t *data, size_t len,
+                           const char *content_type) const;
+
+  // Static image data (replace with your actual image data)
+  static const uint8_t sd_card_png[];
+  static constexpr size_t sd_card_png_len = 0;  // Replace with actual length
+  static const uint8_t download_png[];
+  static constexpr size_t download_png_len = 0;  // Replace with actual length
+  static const uint8_t delete_png[];
+  static constexpr size_t delete_png_len = 0;  // Replace with actual length
 };
 
 struct Path {
