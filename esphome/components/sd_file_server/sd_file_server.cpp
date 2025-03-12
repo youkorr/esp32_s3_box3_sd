@@ -120,10 +120,14 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
    response->printf("</span>");
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-    response->printf("<a href=\"%s\" class=\"download-btn\"><img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
+       response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
+    response->print("<img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\">");
+    response->print("</a>");
   }
   if (!info.is_directory && this->deletion_enabled_) {
-    response->printf("<a href=\"%s\" class=\"delete-btn\" onclick=\"return confirm('Are you sure?')\"><img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
+       response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
+      response->print("<img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\">");
+         response->print("</a>");
   }
   response->print("</td></tr>");
 }
@@ -141,12 +145,10 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
                     "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
-                    ".download-btn, .delete-btn { position: relative; overflow: hidden; }"
-                    ".download-btn:hover::before, .delete-btn:hover::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.1); }"
-                    ".download-btn img, .delete-btn img { transition: transform 0.3s ease; }"
-                    ".download-btn:hover img { transform: scale(1.1); }"
-                    ".delete-btn:hover img { transform: scale(1.1); }"
-                     ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
+                  ".icon-link {display: inline-block; position: relative;}"
+                    ".icon-link:hover { transform: scale(1.1); }"
+                      ".icon-link img { transition: transform 0.3s ease; }"
+                    ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
                     ".filename-container:hover { box-shadow: 0 0 5px #007bff; }"
                     "a { color: #007bff; text-decoration: none; transition: color 0.3s ease; }"
                     "a:hover { text-decoration: underline; color: #0056b3; }"
