@@ -1,4 +1,3 @@
-
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
@@ -454,6 +453,8 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   if (this->sd_mmc_card_->is_directory(path)) {
     request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
     return;
+  }
+  if (this->sd_mmc_card_->delete_file(path))
   }
   if (this->sd_mmc_card_->delete_file(path)) {
     request->send(204, "application/json", "{}");
