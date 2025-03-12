@@ -8,14 +8,6 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
-// Dummy image data (replace with your actual image data)
-const uint8_t SDFileServer::sd_card_png[] = {};
-constexpr size_t SDFileServer::sd_card_png_len;
-const uint8_t SDFileServer::download_png[] = {};
-constexpr size_t SDFileServer::download_png_len;
-const uint8_t SDFileServer::delete_png[] = {};
-constexpr size_t SDFileServer::delete_png_len;
-
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { this->base_->add_handler(this); }
@@ -37,17 +29,6 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
-       std::string url = request->url().c_str();
-            if (url == "/sd_card.png") {
-                handle_static_image(request, sd_card_png, sd_card_png_len, "image/png");
-                return;
-            } else if (url == "/download.png") {
-                handle_static_image(request, download_png, download_png_len, "image/png");
-                return;
-            } else if (url == "/delete.png") {
-                handle_static_image(request, delete_png, delete_png_len, "image/png");
-                return;
-            }
       this->handle_get(request);
       return;
     }
@@ -128,10 +109,10 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   response->printf("</span>");
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-    response->printf("<a href=\"%s\" class=\"icon-link download-btn\"><img src=\"/download.png\" alt=\"Download\"></a>", uri.c_str());
+    response->printf("<a href=\"%s\" style=\"color: green;\">Download</a>", uri.c_str());
   }
   if (!info.is_directory && this->deletion_enabled_) {
-    response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\"><img src=\"/delete.png\" alt=\"Delete\"></a>", uri.c_str());
+    response->printf("<a href=\"%s\" style=\"color: red;\" onclick=\"return confirm('Are you sure?')\">Delete</a>", uri.c_str());
   }
   response->print("</td></tr>");
 }
@@ -144,13 +125,10 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "body { font-family: Arial, sans-serif; background-color: #f0f0f0; color: #333; margin: 0; padding: 20px; }"
                     "h1 { color: #007bff; text-align: center; }"
                     "h2 { color: #666; text-align: center; }"
-                    ".sd-card-image { display: block; margin: 0 auto; width: 100px; height: auto; }"
                     "table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out; }"
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
                     "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
-                    ".icon-link { display: inline-block; position: relative; transition: transform 0.3s ease; }"
-                    ".icon-link:hover { transform: scale(1.1); }"
                     ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
                     ".filename-container:hover { box-shadow: 0 0 5px #007bff; }"
                     "a { color: #007bff; text-decoration: none; transition: color 0.3s ease; }"
@@ -158,7 +136,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }"
                     "</style>"
                     "</head><body>"
-                    "<img src=\"/sd_card.png\" alt=\"SD Card\" class=\"sd-card-image\">"
                     "<h1>SD Card Content</h1><h2>Folder "));
 
   response->print(path.c_str());
@@ -214,7 +191,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-    AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
+  AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
         std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
         if (index >= file->size()) {
             return 0;
@@ -238,25 +215,6 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
     return;
   }
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
-}
-
-void SDFileServer::handle_static_image(AsyncWebServerRequest *request, const uint8_t *data, size_t len,
-                                     const char *content_type) const {
-  AsyncWebServerResponse *response = request->beginResponse(content_type, len, [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
-    const uint8_t *data = reinterpret_cast<const uint8_t *>(ctx);
-    size_t to_send = std::min(maxLen, size_t(SDFileServer::sd_card_png_len) - index);
-    memcpy(buffer, data + index, to_send);
-    return to_send;
-  }, (void*) data);
-  request->send(response);
-}
-
-bool SDFileServer::file_exists(const std::string& filename) const {
-  // Implement your file exists logic here
-  // For example, assuming you're using SD_MMC library
-  // You might use SD_MMC.exists(filename.c_str());
-  // Remember to include SD_MMC.h
-  return true;
 }
 
 std::string SDFileServer::build_prefix() const {
