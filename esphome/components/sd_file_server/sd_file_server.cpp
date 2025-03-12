@@ -32,7 +32,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       this->handle_get(request);
       return;
     }
-    if (request->method() == HTTP_DELETE) {
+    if (request->method() == HTTP_DELETE && this->deletion_enabled_) {
       this->handle_delete(request);
       return;
     }
@@ -107,40 +107,37 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   }
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-    response->print("<button class=\"download-btn\" onClick=\"download_file('");
-    response->print(uri.c_str());
-    response->print("','");
-    response->print(file_name.c_str());
-    response->print("')\">Download</button>");
+    response->printf("<a href=\"%s\" class=\"download-btn\"><img src=\"/download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
   }
-    if (!info.is_directory && this->deletion_enabled_) {
-    response->print("<button class=\"delete-btn\" onClick=\"delete_file('");
-    response->print(uri.c_str());    
-    response->print("')\">Delete</button>");
+  if (!info.is_directory && this->deletion_enabled_) {
+    response->printf("<a href=\"%s\" class=\"delete-btn\" onclick=\"return confirm('Are you sure?')\"><img src=\"/delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
   }
   response->print("</td></tr>");
 }
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-   response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
+  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
                     "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
                     "<style>"
                     "body { font-family: Arial, sans-serif; background-color: #f0f0f0; color: #333; margin: 0; padding: 20px; }"
-                    "h1 { color: #007bff; }"
-                    "h2 { color: #666; }"
-                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }"
+                    "h1 { color: #007bff; text-align: center; }"
+                    "h2 { color: #666; text-align: center; }"
+                    ".sd-card-image { display: block; margin: 0 auto; width: 100px; height: auto; }"
+                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out; }"
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
-                    "tr:hover { background-color: #f5f5f5; transition: background-color 0.3s ease; }"
-                    ".download-btn, .delete-btn { background-color: #28a745; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; transition: background-color 0.3s ease; margin-right: 5px; }"
-                    ".download-btn:hover { background-color: #218838; }"
-                     ".delete-btn { background-color: #dc3545; }"
+                    "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
+                    ".download-btn, .delete-btn { background-color: #28a745; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; transition: background-color 0.3s ease, transform 0.2s ease; margin-right: 5px; }"
+                    ".download-btn:hover, .delete-btn:hover { background-color: #218838; transform: scale(1.05); }"
+                    ".delete-btn { background-color: #dc3545; }"
                     ".delete-btn:hover { background-color: #c82333; }"
                     "a { color: #007bff; text-decoration: none; transition: color 0.3s ease; }"
                     "a:hover { text-decoration: underline; color: #0056b3; }"
+                    "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }"
                     "</style>"
                     "</head><body>"
+                    "<img src=\"/sd_card.png\" alt=\"SD Card\" class=\"sd-card-image\">"
                     "<h1>SD Card Content</h1><h2>Folder "));
 
   response->print(path.c_str());
@@ -152,7 +149,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   for (auto const &entry : entries)
     write_row(response, entry);
 
- response->print(F("</tbody></table>"
+  response->print(F("</tbody></table>"
                     "<script>"
                     "function download_file(path, filename) {"
                     "fetch(path).then(response => response.blob())"
@@ -163,18 +160,20 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "link.click();"
                     "}).catch(console.error);"
                     "}"
-                      "function delete_file(path) {"
+                     "function delete_file(path) {"
+                    "if (confirm('Are you sure you want to delete this file?')) {"
                     "fetch(path, { method: 'DELETE' })"
                     ".then(response => {"
                     "if (response.ok) {"
-                     "alert('File deleted successfully');"
-                      "window.location.reload();"
+                    "alert('File deleted successfully');"
+                    "window.location.reload();"
                     "} else {"
                     "alert('Failed to delete file');"
                     "}"
                     "}).catch(error => {"
                     "alert('Error deleting file: ' + error);"
                     "});"
+                    "}"
                     "}"
                     "</script>"
                     "</body></html>"));
@@ -270,6 +269,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
