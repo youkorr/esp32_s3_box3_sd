@@ -95,16 +95,15 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  std::vector<uint8_t> file_data;
-  if (!this->sd_mmc_card_->read_file(path.c_str(), file_data)) {
+  std::vector<uint8_t> file_data = this->sd_mmc_card_->read_file(path.c_str());
+  if (file_data.empty()) {
     request->send(404);
     return;
   }
 
   auto response = request->beginResponseStream("application/octet-stream");
   response->addHeader("Content-Disposition", ("attachment; filename=\"" + path.substr(path.find_last_of('/') + 1) + "\"").c_str());
-  response->write(file_data.data(), file_data.size());
-  request->send(response);
+  response->send(file_data.data(), file_data.size());
 }
 
 }  // namespace sd_file_server
