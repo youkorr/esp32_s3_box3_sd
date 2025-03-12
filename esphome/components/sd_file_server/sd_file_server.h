@@ -42,6 +42,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void handle_get(AsyncWebServerRequest *) const;
   void handle_delete(AsyncWebServerRequest *);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
+  std::vector<sd_mmc_card::FileInfo> list_dir(const std::string& path) const;
 };
 
 struct Path {
@@ -59,6 +60,7 @@ struct Path {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
