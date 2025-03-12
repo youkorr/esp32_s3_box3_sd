@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
+#include <map>
 
 namespace esphome {
 namespace sd_file_server {
@@ -22,6 +23,39 @@ std::string format_size(size_t size) {
   char buffer[32];
   snprintf(buffer, sizeof(buffer), "%.2f %s", s, units[unit]);
   return std::string(buffer);
+}
+
+// Map file extensions to their types
+std::string get_file_type(const std::string &filename) {
+  static const std::map<std::string, std::string> file_types = {
+    {"mp3", "Audio"},
+    {"wav", "Audio"},
+    {"png", "Image"},
+    {"jpg", "Image"},
+    {"jpeg", "Image"},
+    {"bmp", "Image"},
+    {"txt", "Text"},
+    {"log", "Text"},
+    {"csv", "Text"},
+    {"html", "Web"},
+    {"css", "Web"},
+    {"js", "Web"},
+    {"json", "Data"},
+    {"xml", "Data"},
+    {"zip", "Archive"},
+    {"gz", "Archive"},
+    {"tar", "Archive"}
+  };
+
+  size_t dot_pos = filename.rfind('.');
+  if (dot_pos != std::string::npos) {
+    std::string ext = filename.substr(dot_pos + 1);
+    auto it = file_types.find(ext);
+    if (it != file_types.end()) {
+      return it->second;
+    }
+  }
+  return "File";
 }
 
 // Implementation of Path methods
@@ -154,7 +188,84 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD Card Files</title>
   <style>
-    /* [CSS styles remain the same] */
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #f5f5f7;
+      color: #1d1d1f;
+    }
+    h1 {
+      color: #0066cc;
+      margin-bottom: 1.5rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 2rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    th {
+      background: #f8f9fa;
+      font-weight: 500;
+    }
+    .file-actions {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #0066cc;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #0052a3;
+    }
+    .upload-form {
+      margin-bottom: 2rem;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .upload-form input[type="file"] {
+      margin-right: 1rem;
+    }
+    .breadcrumb {
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .breadcrumb a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    .breadcrumb a:hover {
+      text-decoration: underline;
+    }
+    .folder {
+      color: #0066cc;
+      font-weight: 500;
+    }
+    .file-type {
+      color: #666;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
@@ -218,7 +329,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     
     response->print("<tr><td>");
     if (entry.is_directory) {
-      response->print("<a href=\"");
+      response->print("<a class=\"folder\" href=\"");
       response->print(uri.c_str());
       response->print("\">");
       response->print(file_name.c_str());
@@ -227,7 +338,13 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       response->print(file_name.c_str());
     }
     response->print("</td><td>");
-    response->print(entry.is_directory ? "Folder" : "File");
+    if (entry.is_directory) {
+      response->print("Folder");
+    } else {
+      response->print("<span class=\"file-type\">");
+      response->print(get_file_type(file_name).c_str());
+      response->print("</span>");
+    }
     response->print("</td><td>");
     if (!entry.is_directory) {
       response->print(format_size(entry.size).c_str());
@@ -344,6 +461,7 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
