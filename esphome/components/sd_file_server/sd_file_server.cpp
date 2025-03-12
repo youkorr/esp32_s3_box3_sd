@@ -2,7 +2,6 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
-#include <inttypes.h>
 
 namespace esphome {
 namespace sd_file_server {
@@ -37,7 +36,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_DELETE && this->deletion_enabled_) {
-      this->handle_delete(request, path); // Pass path to handle_delete
+      this->handle_delete(request, path);
       return;
     }
   }
@@ -99,7 +98,6 @@ void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
 void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
   std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
   std::string file_name = Path::file_name(info.path);
-    std::string file_type = get_file_type(file_name);
   response->print("<tr><td>");
   if (info.is_directory) {
     response->print("<a href=\"");
@@ -108,7 +106,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
     response->print(file_name.c_str());
     response->print("</a>");
   } else {
-      response->printf("%s (%s, %s)", file_name.c_str(), file_type.c_str(), format_file_size(info.size).c_str());
+    response->print(file_name.c_str());
   }
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
@@ -190,7 +188,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   request->send(response);
 }
 
-void SDFileServer::handle_delete(AsyncWebServerRequest *request, std::string const &path) {
+void SDFileServer::handle_delete(AsyncWebServerRequest *request, const std::string& path) const {
   if (!this->deletion_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
     return;
@@ -253,31 +251,9 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
   return path.erase(0, root.size());
 }
 
-std::string SDFileServer::format_file_size(size_t bytes) const {
-  const double kibibyte = 1024;
-  const double mebibyte = kibibyte * 1024;
-
-  char buf[16];
-  if (bytes >= mebibyte) {
-    snprintf(buf, sizeof(buf), "%.2f MB", bytes / mebibyte);
-  } else if (bytes >= kibibyte) {
-    snprintf(buf, sizeof(buf), "%.2f KB", bytes / kibibyte);
-  } else {
-    snprintf(buf, sizeof(buf), "%" PRIu32 " B", (uint32_t)bytes);
-  }
-  return buf;
-}
-
-std::string SDFileServer::get_file_type(const std::string& filename) const {
-  size_t dot_pos = filename.rfind('.');
-  if (dot_pos == std::string::npos) {
-    return "file";
-  }
-  return filename.substr(dot_pos + 1);
-}
-
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
