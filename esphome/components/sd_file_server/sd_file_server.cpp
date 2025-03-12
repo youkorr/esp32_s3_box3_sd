@@ -30,7 +30,6 @@ std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
     {"mp3", "Audio"},
     {"wav", "Audio"},
-    {"flac", "Audio"},
     {"png", "Image"},
     {"jpg", "Image"},
     {"jpeg", "Image"},
@@ -332,7 +331,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     if (entry.is_directory) {
       response->print("<a class=\"folder\" href=\"");
       response->print(uri.c_str());
-      response->print("\">");
+      response->print("\">📁 ");
       response->print(file_name.c_str());
       response->print("</a>");
     } else {
@@ -462,7 +461,6 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
