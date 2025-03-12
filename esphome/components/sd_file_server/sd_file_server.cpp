@@ -9,7 +9,7 @@ namespace sd_file_server {
 // Correction de la signature de write_row
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  response->printf("<td>%s</td>", info.name.c_str());  // Utilisation de 'name' au lieu de 'filename'
+  response->printf("<td>%s</td>", info.filename.c_str());  // Utilisation de 'filename' au lieu de 'name'
   response->printf("<td>%d</td>", info.size);
   response->print("</tr>");
 }
@@ -23,7 +23,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
   // Utilisation de la méthode correcte pour lister les fichiers
-  auto files = this->sd_mmc_card_->list_files(path);  // Utilisation de 'list_files' au lieu de 'get_files'
+  auto files = this->sd_mmc_card_->get_files(path);  // Utilisation de 'get_files' au lieu de 'list_files'
   for (auto const &file : files) {
     this->write_row(response, file);
   }
@@ -143,6 +143,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
