@@ -2,6 +2,9 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
+#ifdef USE_ESP32
+#include <SPIFFS.h>
+#endif
 
 namespace esphome {
 namespace sd_file_server {
@@ -122,12 +125,12 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   if (!info.is_directory && this->download_enabled_) {
     response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
     response->print("<img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\">");
-      response->print("</a>");
+    response->print("</a>");
   }
   if (!info.is_directory && this->deletion_enabled_) {
-      response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
+    response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
     response->print("<img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\">");
-          response->print("</a>");
+      response->print("</a>");
   }
   response->print("</td></tr>");
 }
@@ -145,7 +148,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
                     "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
-                   ".icon-link {display: inline-block; position: relative; transition: transform 0.3s ease;}"
+                  ".icon-link {display: inline-block; position: relative; transition: transform 0.3s ease;}"
                     ".icon-link:hover { transform: scale(1.1); }"
                     ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
                     ".filename-container:hover { box-shadow: 0 0 5px #007bff; }"
@@ -245,16 +248,20 @@ void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::strin
     return;
   }
 
-  AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), reinterpret_cast<const uint8_t*>(file.data()), file.size());
+  AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), file.data(), file.size());
   request->send(response);
 }
 
 bool SDFileServer::file_exists(const std::string& filename) const {
-    //Implement your file exists logic here
-    //For example, assuming you're using SD_MMC library
-    //You might use SD_MMC.exists(filename.c_str());
-    //Remember to include SD_MMC.h
-    return true;
+#ifdef USE_ESP32
+  return SPIFFS.exists(filename.c_str());
+#else
+  // Implement your file exists logic here
+  // For example, assuming you're using SD_MMC library
+  // You might use SD_MMC.exists(filename.c_str());
+  // Remember to include SD_MMC.h
+  return true;
+#endif
 }
 
 std::string SDFileServer::build_prefix() const {
