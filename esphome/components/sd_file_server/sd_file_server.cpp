@@ -304,13 +304,13 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   <div class="container">
     <div class="header-actions">
       <h1>SD Card Files</h1>
-      <button onclick="window.location.href='/web_server_esphome'">Accéder à ESPHome</button>
+      <button onclick="window.location.href='/'">Accéder à Web Server</button>
     </div>
     <div class="breadcrumb">
-      <a href="/sd-card">sd-card</a> > )"));
+      <a href="/">home</a> > )"));
 
   // Breadcrumb navigation
-  std::string current_path = "/sd-card/";
+  std::string current_path = "/";
   std::string relative_path = Path::remove_root_path(path, this->root_path_);
   std::vector<std::string> parts;
   size_t pos = 0;
@@ -518,6 +518,7 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
