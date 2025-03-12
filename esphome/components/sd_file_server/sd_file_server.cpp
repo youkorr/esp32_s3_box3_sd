@@ -8,6 +8,22 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
+// Helper function to format file sizes
+std::string format_size(size_t size) {
+  const char* units[] = {"B", "KB", "MB", "GB"};
+  size_t unit = 0;
+  double s = static_cast<double>(size);
+  
+  while (s >= 1024 && unit < 3) {
+    s /= 1024;
+    unit++;
+  }
+  
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%.2f %s", s, units[unit]);
+  return std::string(buffer);
+}
+
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { this->base_->add_handler(this); }
@@ -101,7 +117,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD Card Files</title>
   <style>
-    /* [Previous CSS styles remain the same] */
+    /* [CSS styles remain the same] */
   </style>
 </head>
 <body>
@@ -289,23 +305,9 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
   return absolute;
 }
 
-std::string format_size(size_t size) {
-  const char* units[] = {"B", "KB", "MB", "GB"};
-  size_t unit = 0;
-  double s = static_cast<double>(size);
-  
-  while (s >= 1024 && unit < 3) {
-    s /= 1024;
-    unit++;
-  }
-  
-  char buffer[32];
-  snprintf(buffer, sizeof(buffer), "%.2f %s", s, units[unit]);
-  return std::string(buffer);
-}
-
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
