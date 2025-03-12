@@ -6,7 +6,7 @@
 namespace esphome {
 namespace sd_file_server {
 
-const char *const TAG = "sd_file_server";
+static const char *TAG = "sd_file_server";
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
