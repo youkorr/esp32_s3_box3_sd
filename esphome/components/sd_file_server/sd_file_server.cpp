@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
+#include <inttypes.h>
 
 namespace esphome {
 namespace sd_file_server {
@@ -103,7 +104,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
     response->print(file_name.c_str());
     response->print("</a>");
   } else {
-    response->print(file_name.c_str());
+    response->printf("%s (%s)", file_name.c_str(), format_file_size(info.size).c_str());
   }
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
@@ -186,7 +187,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
-   if (!this->deletion_enabled_) {
+  if (!this->deletion_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
     return;
   }
@@ -197,6 +198,21 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
     return;
   }
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
+}
+
+std::string SDFileServer::format_file_size(size_t bytes) const {
+  const double kibibyte = 1024;
+  const double mebibyte = kibibyte * 1024;
+
+  char buf[16];
+  if (bytes >= mebibyte) {
+    snprintf(buf, sizeof(buf), "%.2f MB", bytes / mebibyte);
+  } else if (bytes >= kibibyte) {
+    snprintf(buf, sizeof(buf), "%.2f KB", bytes / kibibyte);
+  } else {
+    snprintf(buf, sizeof(buf), "%" PRIu32 " B", (uint32_t)bytes);
+  }
+  return buf;
 }
 
 std::string SDFileServer::build_prefix() const {
@@ -252,6 +268,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
