@@ -107,6 +107,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
   std::string file_name = Path::file_name(info.path);
   response->print("<tr><td>");
+    response->printf("<span class=\"filename-container\">");
   if (info.is_directory) {
     response->print("<a href=\"");
     response->print(uri.c_str());
@@ -116,6 +117,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   } else {
     response->print(file_name.c_str());
   }
+   response->printf("</span>");
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
     response->printf("<a href=\"%s\" class=\"download-btn\"><img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
@@ -139,10 +141,13 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
                     "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
-                    ".download-btn, .delete-btn { background-color: #28a745; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; transition: background-color 0.3s ease, transform 0.2s ease; margin-right: 5px; }"
-                    ".download-btn:hover, .delete-btn:hover { background-color: #218838; transform: scale(1.05); }"
-                    ".delete-btn { background-color: #dc3545; }"
-                    ".delete-btn:hover { background-color: #c82333; }"
+                    ".download-btn, .delete-btn { position: relative; overflow: hidden; }"
+                    ".download-btn:hover::before, .delete-btn:hover::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.1); }"
+                    ".download-btn img, .delete-btn img { transition: transform 0.3s ease; }"
+                    ".download-btn:hover img { transform: scale(1.1); }"
+                    ".delete-btn:hover img { transform: scale(1.1); }"
+                     ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
+                    ".filename-container:hover { box-shadow: 0 0 5px #007bff; }"
                     "a { color: #007bff; text-decoration: none; transition: color 0.3s ease; }"
                     "a:hover { text-decoration: underline; color: #0056b3; }"
                     "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }"
@@ -239,7 +244,7 @@ void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::strin
     return;
   }
 
-  AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), file.data(), file.size());
+  AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), reinterpret_cast<const uint8_t*>(file.data()), file.size());
   request->send(response);
 }
 
@@ -296,6 +301,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
