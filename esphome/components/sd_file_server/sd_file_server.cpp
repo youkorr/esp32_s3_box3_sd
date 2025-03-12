@@ -6,36 +6,13 @@
 namespace esphome {
 namespace sd_file_server {
 
-// Ajout de la structure FileInfo
-struct FileInfo {
-  std::string filename;
-  size_t size;
-};
-
-// Ajout de la méthode list_files dans SdMmc
-class SdMmc {
- public:
-  std::vector<FileInfo> list_files(const std::string &path) {
-    std::vector<FileInfo> files;
-    // Implémentation de la lecture des fichiers
-    return files;
-  }
-
-  bool is_directory(const std::string &path) {
-    // Implémentation de la vérification de répertoire
-    return false;
-  }
-};
-
-// Modification de write_row
-void SDFileServer::write_row(AsyncResponseStream *response, const FileInfo &info) const {
+void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
   response->printf("<td>%s</td>", info.filename.c_str());
   response->printf("<td>%d</td>", info.size);
   response->print("</tr>");
 }
 
-// Modification de handle_index
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   auto *response = request->beginResponseStream("text/html");
   response->print("<html><head><title>SD File Server</title></head><body>");
