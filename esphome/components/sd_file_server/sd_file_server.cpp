@@ -57,23 +57,45 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     return;
   }
 
-  std::string path = this->root_path_ + "/" + filename.c_str();
-  
+  static sd_mmc_card::FileHandle upload_file;
   if (index == 0) {
-    if (!this->sd_mmc_card_->write_file(path.c_str(), data, len, false)) {
-      request->send(500);
-      return;
+    String path = request->url();
+    if (path.ends_with("/")) {
+      path += filename;
     }
-  } else {
-    if (!this->sd_mmc_card_->write_file(path.c_str(), data, len, true)) {
+    upload_file = this->sd_mmc_card_->append_file(path.c_str());
+    if (!upload_file) {
       request->send(500);
       return;
     }
   }
 
+  if (upload_file.write(data, len) != len) {
+    upload_file.close();
+    request->send(500);
+    return;
+  }
+
   if (final) {
+    upload_file.close();
     request->send(200);
   }
+}
+
+// ... [rest of the methods remain unchanged until handle_index]
+
+void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
+  auto response = request->beginResponseStream("text/html");
+  response->print("<html><body><table>");
+  response->print("<tr><th>Name</th><th>Size</th><th>Type</th></tr>");
+
+  auto files = this->sd_mmc_card_->list_directory_file_info(path.c_str(), 1);
+  for (auto &file : files) {
+    this->write_row(response, file);
+  }
+
+  response->print("</table></body></html>");
+  request->send(response);
 }
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
@@ -82,20 +104,22 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  std::vector<uint8_t> file_data;
-  if (!this->sd_mmc_card_->read_file(path.c_str(), file_data)) {
+  auto file = this->sd_mmc_card_->append_file(path.c_str());
+  if (!file) {
     request->send(404);
     return;
   }
 
-  auto response = request->beginResponse("application/octet-stream", file_data.size(), [file_data](uint8_t *buffer, size_t maxLen, size_t index) mutable -> size_t {
-    size_t available = file_data.size() - index;
-    size_t to_copy = (available > maxLen) ? maxLen : available;
-    memcpy(buffer, file_data.data() + index, to_copy);
-    return to_copy;
-  });
+  auto response = request->beginResponseStream("application/octet-stream");
+  response->addHeader("Content-Disposition", ("attachment; filename=\"" + path.substr(path.find_last_of('/') + 1) + "\"").c_str());
   
-  response->addHeader("Content-Disposition", "attachment; filename=\"" + path.substr(path.find_last_of('/') + 1) + "\"");
+  char buffer[512];
+  size_t bytes_read;
+  while ((bytes_read = file.read(buffer, sizeof(buffer))) > 0) {
+    response->write((uint8_t*)buffer, bytes_read);
+  }
+  
+  file.close();
   request->send(response);
 }
 
