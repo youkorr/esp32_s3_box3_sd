@@ -202,11 +202,13 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  AsyncWebServerResponse *response = request->beginResponse(this->sd_mmc_card_->get_file_size(path), "application/octet-stream",
-                                                            [this, path](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-    return this->sd_mmc_card_->read_file(path, buffer, maxLen, index);
-  });
-  response->setContentLength(this->sd_mmc_card_->get_file_size(path));
+  size_t file_size = this->sd_mmc_card_->file_size(path);
+  AsyncWebServerResponse *response = request->beginResponse(
+      "application/octet-stream", file_size,
+      [this, path](uint8_t *buffer, size_t len, size_t index) -> size_t {
+        return this->sd_mmc_card_->read_file(path, buffer, len, index);
+      });
+
   request->send(response);
 }
 
@@ -266,6 +268,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
