@@ -2,16 +2,17 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
-#include "esphome/components/sd_mmc_card/sd_mmc_card.h"  // Ajoutez cette inclusion si nécessaire
+#include "esphome/components/sd_mmc_card/sd_mmc_card.h"  // Inclusion nécessaire
 
 namespace esphome {
 namespace sd_file_server {
 
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  // Utilisez les méthodes de FileInfo (ex: name(), size())
-  response->printf("<td>%s</td>", info.name().c_str());  // Méthode 'name()'
-  response->printf("<td>%d</td>", info.size());          // Méthode 'size()'
+  // Utilisez la méthode getName() pour accéder au nom du fichier
+  response->printf("<td>%s</td>", info.getName().c_str());
+  // Utilisez la méthode getSize() pour accéder à la taille du fichier
+  response->printf("<td>%llu</td>", info.getSize());
   response->print("</tr>");
 }
 
@@ -22,19 +23,20 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table border='1'>");
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
-  // Listing des fichiers via l'API SDMmc
+  // Liste des fichiers via l'API SdMmc
   std::vector<sd_mmc_card::FileInfo> files;
-  sd_mmc_card::Dir dir = this->sd_mmc_card_->openDir(path);  // Ouvre le répertoire
+  sd_mmc_card::SdMmc *mmc = this->sd_mmc_card_;  // Accès à l'instance SdMmc
 
-  if (!dir) {
+  if (!mmc->exists(path)) {
     response->print("<tr><td colspan='2'>Erreur: Répertoire introuvable</td></tr>");
     response->print("</table></body></html>");
     request->send(response);
     return;
   }
 
-  while (dir.readDir()) {  // Lit chaque entrée
-    files.push_back(dir.getFileInfo());
+  mmc->openDir(path);  // Ouvre le répertoire
+  while (mmc->readDir()) {  // Lit chaque entrée
+    files.push_back(mmc->getFileInfo());
   }
 
   for (const auto &file : files) {
@@ -156,7 +158,6 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
