@@ -2,7 +2,15 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
-#include <FS.h>  // Inclure pour les opérations sur le système de fichiers
+#ifdef USE_ESP32
+#include <FS.h>
+#include <SD.h>
+#elif defined(USE_ESP8266)
+#include <FS.h>
+#include <SD.h>
+#else
+#error "Unsupported platform"
+#endif
 
 namespace esphome {
 namespace sd_file_server {
@@ -11,7 +19,22 @@ static const char *TAG = "sd_file_server";
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
+void SDFileServer::setup() {
+  this->base_->add_handler(this);
+  // Initialiser la carte SD
+  if (!SD.begin()) {
+    ESP_LOGE(TAG, "Card Mount Failed");
+    return;
+  }
+  uint8_t cardType = SD.cardType();
+
+  if (cardType == CARD_NONE) {
+    ESP_LOGE(TAG, "No SD card attached");
+    return;
+  }
+
+  ESP_LOGI(TAG, "SD Card Type: %u", cardType);
+}
 
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
@@ -54,30 +77,47 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
   std::string path = this->build_absolute_path(extracted);
   const char* char_path = path.c_str();
 
-  if (index == 0 && !this->sd_mmc_card_->is_directory(char_path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
+  // if (index == 0 && !this->sd_mmc_card_->is_directory(char_path)) {
+  //   auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
+  //   response->addHeader("Connection", "close");
+  //   request->send(response);
+  //   return;
+  // }
 
   std::string file_name(filename.c_str());
   std::string full_file_path = Path::join(path, file_name);
   const char* char_full_file_path = full_file_path.c_str();
 
-  if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(char_full_file_path, data, len);
-    return;
-  }
+  // if (index == 0) {
+  //   ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
+  //   this->sd_mmc_card_->write_file(char_full_file_path, data, len);
+  //   return;
+  // }
 
-  this->sd_mmc_card_->append_file(char_full_file_path, data, len);
+  // this->sd_mmc_card_->append_file(char_full_file_path, data, len);
 
   if (final) {
+    File f = SD.open(char_full_file_path, FILE_APPEND);
+    if(!f){
+      ESP_LOGE(TAG, "Failed to open file for appending");
+      request->send(500, "text/plain", "Failed to open file for appending");
+      return;
+    }
+    f.write(data, len);
+    f.close();
     auto response = request->beginResponse(201, "text/html", "upload success");
     response->addHeader("Connection", "close");
     request->send(response);
     return;
+  } else {
+      File f = SD.open(char_full_file_path, FILE_WRITE);
+      if(!f){
+        ESP_LOGE(TAG, "Failed to open file for writing");
+        request->send(500, "text/plain", "Failed to open file for writing");
+        return;
+      }
+      f.write(data, len);
+      f.close();
   }
 }
 
@@ -98,12 +138,16 @@ void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string path = this->build_absolute_path(extracted);
   const char* char_path = path.c_str();
 
-  if (!this->sd_mmc_card_->is_directory(char_path)) {
-    handle_download(request, path);
-    return;
-  }
+  // if (!this->sd_mmc_card_->is_directory(char_path)) {
+  //   handle_download(request, path);
+  //   return;
+  // }
+    if (!SD.exists(char_path) || SD.open(char_path).isDirectory()) {
+        handle_index(request, path);
+        return;
+    }
 
-  handle_index(request, path);
+  handle_download(request, path);
 }
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
@@ -140,6 +184,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     sd_mmc_card::FileInfo file_info;
     file_info.path = file_path;
     this->write_row(response, file_info);
+    file.close();
     file = dir.openNextFile();
   }
   dir.close();
@@ -188,12 +233,12 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
 
   ESP_LOGD(TAG, "deleting file %s", path.c_str());
 
-  if (this->sd_mmc_card_->is_directory(char_path)) {
-    request->send(400, "application/json", "{ \"error\": \"can't delete a directory\" }");
-    return;
+  if (!SD.exists(char_path) || SD.open(char_path).isDirectory()) {
+      request->send(400, "application/json", "{ \"error\": \"can't delete a directory\" }");
+      return;
   }
 
-  if (!this->sd_mmc_card_->delete_file(char_path)) {
+  if (!SD.remove(char_path)) {
     request->send(500, "application/json", "{ \"error\": \"deleting file failed\" }");
     return;
   }
@@ -213,7 +258,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     const char* char_path = path.c_str();
 
 
-  if (this->sd_mmc_card_->is_directory(char_path)) {
+  if (SD.open(char_path).isDirectory()) {
     request->send(400, "application/json", "{ \"error\": \"can't download a directory\" }");
     return;
   }
@@ -305,6 +350,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
