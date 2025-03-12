@@ -42,6 +42,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void handle_get(AsyncWebServerRequest *) const;
   void handle_delete(AsyncWebServerRequest *);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
+  void handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const;
 };
 
 struct Path {
@@ -59,6 +60,7 @@ struct Path {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
