@@ -2,14 +2,16 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
+#include "esphome/components/sd_mmc_card/sd_mmc_card.h"  // Ajoutez cette inclusion si nécessaire
 
 namespace esphome {
 namespace sd_file_server {
 
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  response->printf("<td>%s</td>", info.name.c_str());  // Hypothesized field name: 'name'
-  response->printf("<td>%d</td>", info.size);          // Hypothesized field name: 'size'
+  // Utilisez les méthodes de FileInfo (ex: name(), size())
+  response->printf("<td>%s</td>", info.name().c_str());  // Méthode 'name()'
+  response->printf("<td>%d</td>", info.size());          // Méthode 'size()'
   response->print("</tr>");
 }
 
@@ -20,8 +22,22 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table border='1'>");
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
-  auto files = this->sd_mmc_card_->scan_directory(path);  // Hypothesized method name: 'scan_directory'
-  for (auto const &file : files) {
+  // Listing des fichiers via l'API SDMmc
+  std::vector<sd_mmc_card::FileInfo> files;
+  sd_mmc_card::Dir dir = this->sd_mmc_card_->openDir(path);  // Ouvre le répertoire
+
+  if (!dir) {
+    response->print("<tr><td colspan='2'>Erreur: Répertoire introuvable</td></tr>");
+    response->print("</table></body></html>");
+    request->send(response);
+    return;
+  }
+
+  while (dir.readDir()) {  // Lit chaque entrée
+    files.push_back(dir.getFileInfo());
+  }
+
+  for (const auto &file : files) {
     this->write_row(response, file);
   }
 
@@ -66,7 +82,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
 }
 
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
-  // Implementation de l'upload
+  // Implémentation de l'upload
 }
 
 void SDFileServer::set_url_prefix(std::string const &url_prefix) {
@@ -105,17 +121,18 @@ std::string SDFileServer::build_absolute_path(std::string path) const {
   return Path::join(this->root_path_, path);
 }
 
+// Gestion des chemins (Path utilities)
 std::string Path::file_name(std::string const &path) {
-  size_t pos = path.find_last_of(separator);
+  size_t pos = path.find_last_of('/');
   return pos == std::string::npos ? path : path.substr(pos + 1);
 }
 
 bool Path::is_absolute(std::string const &path) {
-  return !path.empty() && path[0] == separator;
+  return !path.empty() && path[0] == '/';
 }
 
 bool Path::trailing_slash(std::string const &path) {
-  return !path.empty() && path.back() == separator;
+  return !path.empty() && path.back() == '/';
 }
 
 std::string Path::join(std::string const &path1, std::string const &path2) {
@@ -124,7 +141,7 @@ std::string Path::join(std::string const &path1, std::string const &path2) {
 
   std::string result = path1;
   if (!trailing_slash(path1) && !is_absolute(path2)) {
-    result += separator;
+    result += "/";
   }
   result += path2;
   return result;
