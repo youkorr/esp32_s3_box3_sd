@@ -322,7 +322,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       </thead>
       <tbody>
   )"));
-
+  response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries) {
     std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
