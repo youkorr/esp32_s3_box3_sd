@@ -96,6 +96,7 @@ void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
 void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
   std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
   std::string file_name = Path::file_name(info.path);
+    std::string file_type = get_file_type(file_name);
   response->print("<tr><td>");
   if (info.is_directory) {
     response->print("<a href=\"");
@@ -104,7 +105,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
     response->print(file_name.c_str());
     response->print("</a>");
   } else {
-    response->printf("%s (%s)", file_name.c_str(), format_file_size(info.size).c_str());
+    response->printf("%s (%s)", file_name.c_str(), file_type.c_str());
   }
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
@@ -213,6 +214,14 @@ std::string SDFileServer::format_file_size(size_t bytes) const {
     snprintf(buf, sizeof(buf), "%" PRIu32 " B", (uint32_t)bytes);
   }
   return buf;
+}
+
+std::string SDFileServer::get_file_type(const std::string& filename) const {
+  size_t dot_pos = filename.rfind('.');
+  if (dot_pos == std::string::npos) {
+    return "file";
+  }
+  return filename.substr(dot_pos + 1);
 }
 
 std::string SDFileServer::build_prefix() const {
