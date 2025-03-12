@@ -263,7 +263,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   
   while ((bytes_read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
     // Use the correct method for ESP-IDF
-    response->send((const char*)buffer, bytes_read);
+    response->print((const char*)buffer, bytes_read);
   }
   
   fclose(f);
@@ -369,6 +369,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
