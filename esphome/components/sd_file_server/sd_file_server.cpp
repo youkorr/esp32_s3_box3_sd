@@ -326,7 +326,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       }
   );
   
-  response->addHeader("Content-Disposition", "attachment; filename=" + filename);
+  response->addHeader("Content-Disposition", ("attachment; filename=" + filename).c_str());
   request->send(response);
 #else
   // Version non-ESP-IDF simplifiée et améliorée
