@@ -20,9 +20,9 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void set_url_prefix(std::string const &);
   void set_root_path(std::string const &);
   void set_sd_mmc_card(sd_mmc_card::SdMmc *);
-  void set_deletion_enabled(bool);
-  void set_download_enabled(bool);
-  void set_upload_enabled(bool);
+  void set_deletion_enabled(bool allow);
+  void set_download_enabled(bool allow);
+  void set_upload_enabled(bool allow);
 
  protected:
   web_server_base::WebServerBase *base_;
@@ -59,6 +59,7 @@ struct Path {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
