@@ -31,12 +31,15 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   ESP_LOGD(TAG, "%s", request->url().c_str());
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
+    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+    std::string path = this->build_absolute_path(extracted);
+
     if (request->method() == HTTP_GET) {
       this->handle_get(request);
       return;
     }
     if (request->method() == HTTP_DELETE) {
-      this->handle_delete(request);
+      this->handle_delete(request, path);
       return;
     }
   }
@@ -185,13 +188,11 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   request->send(response);
 }
 
-void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
+void SDFileServer::handle_delete(AsyncWebServerRequest *request, const std::string& path) const {
   if (!this->deletion_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
   }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
   if (this->sd_mmc_card_->is_directory(path)) {
     request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
     return;
