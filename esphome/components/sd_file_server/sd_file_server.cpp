@@ -8,8 +8,8 @@ namespace sd_file_server {
 
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  response->printf("<td>%s</td>", info.name.c_str());  // Corrected field name: 'name'
-  response->printf("<td>%d</td>", info.size);          // Corrected field name: 'size'
+  response->printf("<td>%s</td>", info.filename.c_str());  // Corrected field name: 'filename'
+  response->printf("<td>%d</td>", info.size_bytes);        // Corrected field name: 'size_bytes'
   response->print("</tr>");
 }
 
@@ -20,7 +20,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table border='1'>");
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
-  auto files = this->sd_mmc_card_->list_files(path);  // Corrected method name: 'list_files'
+  auto files = this->sd_mmc_card_->read_directory(path);  // Corrected method name: 'read_directory'
   for (auto const &file : files) {
     this->write_row(response, file);
   }
