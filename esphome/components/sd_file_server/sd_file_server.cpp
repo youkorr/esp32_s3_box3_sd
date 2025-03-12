@@ -122,8 +122,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table>");
   response->print("<thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>");
 
-  std::vector<sd_mmc_card::FileInfo> file_list;
-  this->sd_mmc_card_->list_dir(path, file_list);
+  std::vector<sd_mmc_card::FileInfo> file_list = list_dir(path);
   for (auto &file : file_list) {
     this->write_row(response, file);
   }
@@ -194,14 +193,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
   ESP_LOGD(TAG, "downloading file %s", path.c_str());
 
-  if (this->sd_mmc_card_->is_directory(path)) {
-    request->send(400, "application/json", "{ \"error\": \"can't download a directory\" }");
-    return;
-  }
-
-  // Assuming that the sd_mmc_card_->read_file function can read the entire file
   std::vector<uint8_t> file_data = this->sd_mmc_card_->read_file(path);
-  if (file_data.empty()) {
+   if (file_data.empty()) {
     request->send(404, "application/json", "{ \"error\": \"file not found\" }");
     return;
   }
@@ -210,7 +203,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       "application/octet-stream", file_data.size(),
       [file_data](uint8_t *buffer, size_t len, size_t index) -> size_t {
         if (index >= file_data.size()) {
-          return 0; // End of file
+          return 0;
         }
         size_t bytes_to_copy = std::min(len, file_data.size() - index);
         memcpy(buffer, file_data.data() + index, bytes_to_copy);
@@ -218,6 +211,14 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       });
 
   request->send(response);
+}
+
+std::vector<sd_mmc_card::FileInfo> SDFileServer::list_dir(const std::string& path) const {
+    std::vector<sd_mmc_card::FileInfo> file_list;
+    // Assuming that sd_mmc_card_ has a method to get the list of files in a directory
+    // The method should return a vector of FileInfo
+    file_list = this->sd_mmc_card_->get_file_list(path);
+    return file_list;
 }
 
 std::string SDFileServer::build_prefix() const { return "/" + this->url_prefix_; }
@@ -276,6 +277,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
