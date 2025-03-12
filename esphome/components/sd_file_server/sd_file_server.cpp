@@ -11,6 +11,21 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
+// Variables globales pour les thèmes
+const char* LIGHT_THEME_CSS = R"(
+  body { background: #f5f5f5; color: #333; }
+  table { background: white; }
+  th { background: var(--primary-color); }
+  .btn { color: white; }
+)";
+
+const char* DARK_THEME_CSS = R"(
+  body { background: #1a1a1a; color: #e0e0e0; }
+  table { background: #2d2d2d; }
+  th { background: #1e3a5a; }
+  .btn { color: #e0e0e0; }
+)";
+
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { this->base_->add_handler(this); }
@@ -166,160 +181,88 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
   
-  response->print(F(R"(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <style>
-    :root {
-      --primary-color: #2c3e50;
-    }
-    
-    body { 
-      font-family: 'Segoe UI', sans-serif; 
-      background: #f5f5f5; 
-      color: #333; 
-      margin: 0; 
-      padding: 20px; 
-      transition: background 0.3s, color 0.3s;
-    }
-    
-    body.dark-theme {
-      background: #1a1a1a;
-      color: #e0e0e0;
-    }
-    
-    .theme-toggle {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      padding: 10px;
-      border-radius: 50%;
-      cursor: pointer;
-      z-index: 1000;
-      background: var(--primary-color);
-      color: white;
-      border: none;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    
-    .color-picker {
-      position: fixed;
-      bottom: 80px;
-      right: 20px;
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      display: none;
-    }
-    
-    .color-option {
-      width: 30px;
-      height: 30px;
-      margin: 5px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: inline-block;
-      transition: transform 0.2s;
-    }
-    
-    .color-option:hover {
-      transform: scale(1.1);
-    }
-  </style>
-</head>
-<body>
-  <h1>SD Card Content</h1>
-  <h2>Folder )"));
+  // Construire le HTML en plusieurs parties
+  response->print(F("<!DOCTYPE html><html lang=\"en\"><head>"));
+  response->print(F("<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\">"));
+  response->print(F("<style>"));
+  response->print(F(":root { --primary-color: #2c3e50; }"));
+  response->print(F("body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; margin: 0; padding: 20px; transition: background 0.3s, color 0.3s; }"));
+  response->print(F("body.dark-theme { background: #1a1a1a; color: #e0e0e0; }"));
+  response->print(F(".theme-toggle { position: fixed; bottom: 20px; right: 20px; padding: 10px; border-radius: 50%; cursor: pointer; z-index: 1000; background: var(--primary-color); color: white; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }"));
+  response->print(F(".color-picker { position: fixed; bottom: 80px; right: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: none; }"));
+  response->print(F(".color-option { width: 30px; height: 30px; margin: 5px; border-radius: 50%; cursor: pointer; display: inline-block; transition: transform 0.2s; }"));
+  response->print(F(".color-option:hover { transform: scale(1.1); }"));
+  response->print(F("</style></head><body>"));
+  
+  response->print(F("<h1>SD Card Content</h1><h2>Folder "));
   response->print(path.c_str());
   response->print(F("</h2>"));
   
   if (this->upload_enabled_) {
-    response->print(F(R"(
-    <div class="upload-form">
-      <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="file">
-        <input type="submit" value="Upload File">
-      </form>
-    </div>)"));
+    response->print(F("<div class=\"upload-form\"><form method=\"POST\" enctype=\"multipart/form-data\"><input type=\"file\" name=\"file\"><input type=\"submit\" value=\"Upload File\"></form></div>"));
   }
 
-  response->print(F(R"(
-  <a href="/)"));
+  response->print(F("<a href=\"/"));
   response->print(this->url_prefix_.c_str());
-  response->print(F(R"(" class="home-link">← Back to Home</a>
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Type</th>
-        <th>Size</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>)"));
+  response->print(F("\" class=\"home-link\">← Back to Home</a>"));
+  response->print(F("<table><thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Actions</th></tr></thead><tbody>"));
   
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries)
     write_row(response, entry);
 
-  response->print(F(R"(
-    </tbody>
-  </table>
+  response->print(F("</tbody></table>"));
   
-  <div class="theme-toggle" onclick="toggleTheme()">🌓</div>
-  <div class="color-picker" id="colorPicker">
-    <div class="color-option" style="background: #2c3e50;" onclick="changeColor('#2c3e50')"></div>
-    <div class="color-option" style="background: #27ae60;" onclick="changeColor('#27ae60')"></div>
-    <div class="color-option" style="background: #e74c3c;" onclick="changeColor('#e74c3c')"></div>
-    <div class="color-option" style="background: #2980b9;" onclick="changeColor('#2980b9')"></div>
-  </div>
+  // Ajouter le toggle et le panneau de couleur
+  response->print(F("<div class=\"theme-toggle\" onclick=\"toggleTheme()\">🌓</div>"));
+  response->print(F("<div class=\"color-picker\" id=\"colorPicker\">"));
+  response->print(F("<div class=\"color-option\" style=\"background: #2c3e50;\" onclick=\"changeColor('#2c3e50')\"></div>"));
+  response->print(F("<div class=\"color-option\" style=\"background: #27ae60;\" onclick=\"changeColor('#27ae60')\"></div>"));
+  response->print(F("<div class=\"color-option\" style=\"background: #e74c3c;\" onclick=\"changeColor('#e74c3c')\"></div>"));
+  response->print(F("<div class=\"color-option\" style=\"background: #2980b9;\" onclick=\"changeColor('#2980b9')\"></div>"));
+  response->print(F("</div>"));
 
-  <script>
-    function toggleTheme() {
-      const body = document.body;
-      const isDark = body.classList.toggle('dark-theme');
-      localStorage.setItem('theme', isDark ? 'dark' : 'light');
-      updateThemeToggle();
-    }
-
-    function updateThemeToggle() {
-      const toggle = document.querySelector('.theme-toggle');
-      toggle.textContent = document.body.classList.contains('dark-theme') ? '🌞' : '🌙';
-      const colorPicker = document.getElementById('colorPicker');
-      colorPicker.style.display = document.body.classList.contains('dark-theme') ? 'none' : 'block';
-    }
-
-    function changeColor(color) {
-      document.documentElement.style.setProperty('--primary-color', color);
-      localStorage.setItem('primaryColor', color);
-      updateButtonsColor(color);
-    }
-
-    function updateButtonsColor(color) {
-      const buttons = document.querySelectorAll('.btn');
-      buttons.forEach(btn => {
-        btn.style.backgroundColor = color;
-      });
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      const savedTheme = localStorage.getItem('theme') || 'light';
-      if (savedTheme === 'dark') {
-        document.body.classList.add('dark-theme');
-      }
-      updateThemeToggle();
-
-      const savedColor = localStorage.getItem('primaryColor') || '#2c3e50';
-      document.documentElement.style.setProperty('--primary-color', savedColor);
-      updateButtonsColor(savedColor);
-    });
-  </script>
-</body>
-</html>)"));
+  // Ajouter le script JavaScript
+  response->print(F("<script>"));
+  response->print(F("function toggleTheme() {"));
+  response->print(F("const body = document.body;"));
+  response->print(F("const isDark = body.classList.toggle('dark-theme');"));
+  response->print(F("localStorage.setItem('theme', isDark ? 'dark' : 'light');"));
+  response->print(F("updateThemeToggle();"));
+  response->print(F("}"));
+  
+  response->print(F("function updateThemeToggle() {"));
+  response->print(F("const toggle = document.querySelector('.theme-toggle');"));
+  response->print(F("toggle.textContent = document.body.classList.contains('dark-theme') ? '🌞' : '🌙';"));
+  response->print(F("const colorPicker = document.getElementById('colorPicker');"));
+  response->print(F("colorPicker.style.display = document.body.classList.contains('dark-theme') ? 'none' : 'block';"));
+  response->print(F("}"));
+  
+  response->print(F("function changeColor(color) {"));
+  response->print(F("document.documentElement.style.setProperty('--primary-color', color);"));
+  response->print(F("localStorage.setItem('primaryColor', color);"));
+  response->print(F("updateButtonsColor(color);"));
+  response->print(F("}"));
+  
+  response->print(F("function updateButtonsColor(color) {"));
+  response->print(F("const buttons = document.querySelectorAll('.btn');"));
+  response->print(F("buttons.forEach(btn => {"));
+  response->print(F("btn.style.backgroundColor = color;"));
+  response->print(F("});"));
+  response->print(F("}"));
+  
+  response->print(F("document.addEventListener('DOMContentLoaded', () => {"));
+  response->print(F("const savedTheme = localStorage.getItem('theme') || 'light';"));
+  response->print(F("if (savedTheme === 'dark') {"));
+  response->print(F("document.body.classList.add('dark-theme');"));
+  response->print(F("}"));
+  response->print(F("updateThemeToggle();"));
+  
+  response->print(F("const savedColor = localStorage.getItem('primaryColor') || '#2c3e50';"));
+  response->print(F("document.documentElement.style.setProperty('--primary-color', savedColor);"));
+  response->print(F("updateButtonsColor(savedColor);"));
+  response->print(F("});"));
+  response->print(F("</script></body></html>"));
 
   request->send(response);
 }
