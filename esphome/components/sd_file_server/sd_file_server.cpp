@@ -11,21 +11,6 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
-// Variables globales pour les thèmes
-const char* LIGHT_THEME_CSS = R"(
-  body { background: #f5f5f5; color: #333; }
-  table { background: white; }
-  th { background: var(--primary-color); }
-  .btn { color: white; }
-)";
-
-const char* DARK_THEME_CSS = R"(
-  body { background: #1a1a1a; color: #e0e0e0; }
-  table { background: #2d2d2d; }
-  th { background: #1e3a5a; }
-  .btn { color: #e0e0e0; }
-)";
-
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { this->base_->add_handler(this); }
@@ -206,8 +191,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       color: #e0e0e0;
     }
     
-    /* [Le reste des styles existants...] */
-    
     .theme-toggle {
       position: fixed;
       bottom: 20px;
@@ -250,7 +233,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 </head>
 <body>
   <h1>SD Card Content</h1>
-  <h2>Folder ");
+  <h2>Folder )"));
   response->print(path.c_str());
   response->print(F("</h2>"));
   
@@ -296,7 +279,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   </div>
 
   <script>
-    // Gestion du thème
     function toggleTheme() {
       const body = document.body;
       const isDark = body.classList.toggle('dark-theme');
@@ -311,7 +293,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       colorPicker.style.display = document.body.classList.contains('dark-theme') ? 'none' : 'block';
     }
 
-    // Gestion des couleurs
     function changeColor(color) {
       document.documentElement.style.setProperty('--primary-color', color);
       localStorage.setItem('primaryColor', color);
@@ -325,16 +306,13 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       });
     }
 
-    // Initialisation au chargement
     document.addEventListener('DOMContentLoaded', () => {
-      // Thème
       const savedTheme = localStorage.getItem('theme') || 'light';
       if (savedTheme === 'dark') {
         document.body.classList.add('dark-theme');
       }
       updateThemeToggle();
 
-      // Couleur
       const savedColor = localStorage.getItem('primaryColor') || '#2c3e50';
       document.documentElement.style.setProperty('--primary-color', savedColor);
       updateButtonsColor(savedColor);
@@ -342,7 +320,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   </script>
 </body>
 </html>)"));
-  
+
   request->send(response);
 }
 
