@@ -250,7 +250,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t file_size = ftell(f);
   fseek(f, 0, SEEK_SET);
 
-  // ESP-IDF specific implementation with single argument
+  // ESP-IDF specific implementation
   auto *response = request->beginResponseStream("application/octet-stream");
   
   // Set Content-Length header manually
@@ -262,7 +262,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t bytes_read;
   
   while ((bytes_read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
-    response->write(buffer, bytes_read);
+    // Use the correct method for ESP-IDF
+    response->write((const char*)buffer, bytes_read);
   }
   
   fclose(f);
