@@ -1,3 +1,4 @@
+
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
@@ -267,6 +268,18 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       color: #666;
       font-size: 0.9rem;
     }
+    .nav-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1.5rem;
+    }
+    .nav-buttons button {
+      background: #e0e0e0;
+      color: #1d1d1f;
+    }
+    .nav-buttons button:hover {
+      background: #d0d0d0;
+    }
   </style>
 </head>
 <body>
@@ -298,6 +311,14 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print(F(R"(
     </div>
     )"));
+
+  // Navigation buttons (back/forward)
+  response->print(F(R"(
+    <div class="nav-buttons">
+      <button onclick="history.back()">← Back</button>
+      <button onclick="history.forward()">→ Forward</button>
+    </div>
+  )"));
 
   if (this->upload_enabled_) {
     response->print(F(R"(
