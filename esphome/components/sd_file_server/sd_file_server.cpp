@@ -29,12 +29,15 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
+    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+    std::string path = this->build_absolute_path(extracted);
+
     if (request->method() == HTTP_GET) {
       this->handle_get(request);
       return;
     }
     if (request->method() == HTTP_DELETE && this->deletion_enabled_) {
-      this->handle_delete(request);
+      this->handle_delete(request, path); // Pass path to handle_delete
       return;
     }
   }
@@ -187,41 +190,16 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   request->send(response);
 }
 
-void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
+void SDFileServer::handle_delete(AsyncWebServerRequest *request, std::string const &path) {
   if (!this->deletion_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
     return;
   }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
   if (!this->sd_mmc_card_->delete_file(path)) {
     request->send(500, "application/json", "{ \"error\": \"deleting file failed\" }");
     return;
   }
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
-}
-
-std::string SDFileServer::format_file_size(size_t bytes) const {
-  const double kibibyte = 1024;
-  const double mebibyte = kibibyte * 1024;
-
-  char buf[16];
-  if (bytes >= mebibyte) {
-    snprintf(buf, sizeof(buf), "%.2f MB", bytes / mebibyte);
-  } else if (bytes >= kibibyte) {
-    snprintf(buf, sizeof(buf), "%.2f KB", bytes / kibibyte);
-  } else {
-    snprintf(buf, sizeof(buf), "%" PRIu32 " B", (uint32_t)bytes);
-  }
-  return buf;
-}
-
-std::string SDFileServer::get_file_type(const std::string& filename) const {
-  size_t dot_pos = filename.rfind('.');
-  if (dot_pos == std::string::npos) {
-    return "file";
-  }
-  return filename.substr(dot_pos + 1);
 }
 
 std::string SDFileServer::build_prefix() const {
@@ -273,6 +251,29 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (path.size() == root.size() || path.size() < 2)
     return "/";
   return path.erase(0, root.size());
+}
+
+std::string SDFileServer::format_file_size(size_t bytes) const {
+  const double kibibyte = 1024;
+  const double mebibyte = kibibyte * 1024;
+
+  char buf[16];
+  if (bytes >= mebibyte) {
+    snprintf(buf, sizeof(buf), "%.2f MB", bytes / mebibyte);
+  } else if (bytes >= kibibyte) {
+    snprintf(buf, sizeof(buf), "%.2f KB", bytes / kibibyte);
+  } else {
+    snprintf(buf, sizeof(buf), "%" PRIu32 " B", (uint32_t)bytes);
+  }
+  return buf;
+}
+
+std::string SDFileServer::get_file_type(const std::string& filename) const {
+  size_t dot_pos = filename.rfind('.');
+  if (dot_pos == std::string::npos) {
+    return "file";
+  }
+  return filename.substr(dot_pos + 1);
 }
 
 }  // namespace sd_file_server
