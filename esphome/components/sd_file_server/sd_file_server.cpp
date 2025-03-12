@@ -3,15 +3,18 @@
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
 
-#ifdef USE_ESP32
-#include <FS.h>
-#include <SPIFFS.h>
-#endif
-
 namespace esphome {
 namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
+
+// Dummy image data (replace with your actual image data)
+const uint8_t SDFileServer::sd_card_png[] = {};
+constexpr size_t SDFileServer::sd_card_png_len;
+const uint8_t SDFileServer::download_png[] = {};
+constexpr size_t SDFileServer::download_png_len;
+const uint8_t SDFileServer::delete_png[] = {};
+constexpr size_t SDFileServer::delete_png_len;
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
@@ -36,13 +39,13 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
     if (request->method() == HTTP_GET) {
       std::string url = request->url().c_str();
       if (url == "/sd_card.png") {
-        this->handle_image(request, "sd_card.png", "image/png");
+        handle_static_image(request, sd_card_png, sd_card_png_len, "image/png");
         return;
       } else if (url == "/download.png") {
-        this->handle_image(request, "download.png", "image/png");
+        handle_static_image(request, download_png, download_png_len, "image/png");
         return;
       } else if (url == "/delete.png") {
-        this->handle_image(request, "delete.png", "image/png");
+        handle_static_image(request, delete_png, delete_png_len, "image/png");
         return;
       }
       this->handle_get(request);
@@ -112,7 +115,7 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
   std::string file_name = Path::file_name(info.path);
   response->print("<tr><td>");
-    response->printf("<span class=\"filename-container\">");
+  response->printf("<span class=\"filename-container\">");
   if (info.is_directory) {
     response->print("<a href=\"");
     response->print(uri.c_str());
@@ -122,17 +125,13 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   } else {
     response->print(file_name.c_str());
   }
-   response->printf("</span>");
+  response->printf("</span>");
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-       response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
-    response->print("<img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\">");
-    response->print("</a>");
+    response->printf("<a href=\"%s\" class=\"icon-link download-btn\"><img src=\"/download.png\" alt=\"Download\"></a>", uri.c_str());
   }
   if (!info.is_directory && this->deletion_enabled_) {
-      response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
-    response->print("<img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\">");
-          response->print("</a>");
+    response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\"><img src=\"/delete.png\" alt=\"Delete\"></a>", uri.c_str());
   }
   response->print("</td></tr>");
 }
@@ -150,7 +149,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
                     "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
-                  ".icon-link {display: inline-block; position: relative; transition: transform 0.3s ease;}"
+                    ".icon-link { display: inline-block; position: relative; transition: transform 0.3s ease; }"
                     ".icon-link:hover { transform: scale(1.1); }"
                     ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
                     ".filename-container:hover { box-shadow: 0 0 5px #007bff; }"
@@ -159,7 +158,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }"
                     "</style>"
                     "</head><body>"
-                    "<img src=\"sd_card.png\" alt=\"SD Card\" class=\"sd-card-image\">"
+                    "<img src=\"/sd_card.png\" alt=\"SD Card\" class=\"sd-card-image\">"
                     "<h1>SD Card Content</h1><h2>Folder "));
 
   response->print(path.c_str());
@@ -182,7 +181,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "link.click();"
                     "}).catch(console.error);"
                     "}"
-                     "function delete_file(path) {"
+                    "function delete_file(path) {"
                     "if (confirm('Are you sure you want to delete this file?')) {"
                     "fetch(path, { method: 'DELETE' })"
                     ".then(response => {"
@@ -214,8 +213,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
+
+  AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
         std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
         if (index >= file->size()) {
             return 0;
@@ -224,18 +223,11 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
         memcpy(buffer, file->data() + index, to_send);
         return to_send;
     }, (void*)&file);
-    request->send(response);
-#else
-    AsyncWebServerResponse *response = request->beginResponseStream("application/octet-stream");
-    response->write(file.data(), file.size());
-    request->send(response);
-#endif
-
-
+  request->send(response);
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
-   if (!this->deletion_enabled_) {
+  if (!this->deletion_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
     return;
   }
@@ -248,46 +240,23 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
 }
 
-void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const {
-    if (!file_exists(filename)) {
-        request->send(404, "text/plain", "File not found");
-        return;
-    }
-
-    auto file = this->sd_mmc_card_->read_file(filename);
-    if (file.empty()) {
-        request->send(500, "text/plain", "Failed to read file");
-        return;
-    }
-#ifdef USE_ESP_IDF
-   AsyncWebServerResponse *response = request->beginResponse(contentType.c_str(), file.size(), [](uint8_t *buffer, size_t len, size_t index, void *ctx) -> size_t {
-        std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
-        if (index >= file->size()) {
-            return 0;
-        }
-        size_t to_send = std::min(len, file->size() - index);
-        memcpy(buffer, file->data() + index, to_send);
-        return to_send;
-    }, (void*)&file);
-    request->send(response);
-#else
-    AsyncWebServerResponse *response = request->beginResponseStream(contentType.c_str());
-    response->write(file.data(), file.size());
-    request->send(response);
-#endif
+void SDFileServer::handle_static_image(AsyncWebServerRequest *request, const uint8_t *data, size_t len,
+                                     const char *content_type) const {
+  AsyncWebServerResponse *response = request->beginResponse(content_type, len, [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
+    const uint8_t *data = reinterpret_cast<const uint8_t *>(ctx);
+    size_t to_send = std::min(maxLen, size_t(sd_card_png_len) - index);
+    memcpy(buffer, data + index, to_send);
+    return to_send;
+  }, (void*) data);
+  request->send(response);
 }
 
 bool SDFileServer::file_exists(const std::string& filename) const {
-#ifdef USE_ESP32
-  fs::SPIFFSFS& spiffs = SPIFFS;
-  return spiffs.exists(filename.c_str());
-#else
   // Implement your file exists logic here
   // For example, assuming you're using SD_MMC library
   // You might use SD_MMC.exists(filename.c_str());
   // Remember to include SD_MMC.h
   return true;
-#endif
 }
 
 std::string SDFileServer::build_prefix() const {
@@ -343,6 +312,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
