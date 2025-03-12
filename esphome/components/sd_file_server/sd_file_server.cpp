@@ -29,6 +29,17 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
+      std::string url = request->url().c_str();
+      if (url == "/sd_card.png") {
+        this->handle_image(request, "sd_card.png", "image/png");
+        return;
+      } else if (url == "/download.png") {
+        this->handle_image(request, "download.png", "image/png");
+        return;
+      } else if (url == "/delete.png") {
+        this->handle_image(request, "delete.png", "image/png");
+        return;
+      }
       this->handle_get(request);
       return;
     }
@@ -107,10 +118,10 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
   }
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-    response->printf("<a href=\"%s\" class=\"download-btn\"><img src=\"/download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
+    response->printf("<a href=\"%s\" class=\"download-btn\"><img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
   }
   if (!info.is_directory && this->deletion_enabled_) {
-    response->printf("<a href=\"%s\" class=\"delete-btn\" onclick=\"return confirm('Are you sure?')\"><img src=\"/delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
+    response->printf("<a href=\"%s\" class=\"delete-btn\" onclick=\"return confirm('Are you sure?')\"><img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\"></a>", uri.c_str());
   }
   response->print("</td></tr>");
 }
@@ -137,7 +148,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }"
                     "</style>"
                     "</head><body>"
-                    "<img src=\"/sd_card.png\" alt=\"SD Card\" class=\"sd-card-image\">"
+                    "<img src=\"sd_card.png\" alt=\"SD Card\" class=\"sd-card-image\">"
                     "<h1>SD Card Content</h1><h2>Folder "));
 
   response->print(path.c_str());
@@ -216,6 +227,22 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
 }
 
+void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const {
+  if (!this->sd_mmc_card_->file_exists(filename)) {
+    request->send(404, "text/plain", "File not found");
+    return;
+  }
+
+  auto file = this->sd_mmc_card_->read_file(filename);
+  if (file.empty()) {
+    request->send(500, "text/plain", "Failed to read file");
+    return;
+  }
+
+  AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), file.data(), file.size());
+  request->send(response);
+}
+
 std::string SDFileServer::build_prefix() const {
   if (this->url_prefix_.length() == 0 || this->url_prefix_.at(0) != '/')
     return "/" + this->url_prefix_;
@@ -269,6 +296,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
