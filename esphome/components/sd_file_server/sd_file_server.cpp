@@ -17,64 +17,19 @@ void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
   ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
   ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Deletation Enabled: %s", TRUEFALSE(this->deletion_enabled_));
   ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
-  ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "can handle %s %u", request->url().c_str(),
-           str_startswith(std::string(request->url().c_str()), this->build_prefix()));
   return str_startswith(std::string(request->url().c_str()), this->build_prefix());
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "%s", request->url().c_str());
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
       this->handle_get(request);
       return;
     }
-    if (request->method() == HTTP_DELETE) {
-      this->handle_delete(request);
-      return;
-    }
-  }
-}
-
-void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                                size_t len, bool final) {
-  if (!this->upload_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
-    return;
-  }
-
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
-
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
-
-  std::string file_name(filename.c_str());
-  std::string full_path = Path::join(path, file_name);
-
-  if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(full_path, data, len);
-    return;
-  }
-
-  this->sd_mmc_card_->append_file(full_path, data, len);
-
-  if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
   }
 }
 
@@ -84,11 +39,7 @@ void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = p
 
 void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
 
-void SDFileServer::set_deletion_enabled(bool allow) { this->deletion_enabled_ = allow; }
-
 void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = allow; }
-
-void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allow; }
 
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
@@ -102,177 +53,146 @@ void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   handle_index(request, path);
 }
 
-void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
-  auto response = request->beginResponseStream("text/html");
-  response->print("<!DOCTYPE html><html><head>");
-  response->print("<title>SD Card Files</title>");
-  // Ajout des styles CSS ici
-  response->print("<style>");
-  response->print("body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; }");
-  response->print(".container { width: 80%; margin: auto; overflow: hidden; }");
-  response->print("table { width: 100%; border-collapse: collapse; margin-top: 20px; }");
-  response->print("th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }");
-  response->print("th { background-color: #007bff; color: white; }");
-  response->print("tr:hover { background-color: #f5f5f5; }");
-  response->print(".actions a { display: inline-block; padding: 8px 12px; margin: 5px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; transition: background-color 0.3s ease; }");
-  response->print(".actions a:hover { background-color: #0056b3; }");
-  response->print("</style>");
-  response->print("</head><body>");
-  response->printf("<div class='container'><h1>Files in %s</h1>", path.c_str());
-  response->print("<table>");
-  response->print("<thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>");
-
-  std::vector<sd_mmc_card::FileInfo> file_list = list_dir(path);
-  for (auto &file : file_list) {
-    this->write_row(response, file);
-  }
-
-  response->print("</tbody></table>");
-    // Ajout du script JavaScript ici
-  response->print("<script>");
-  response->print("document.querySelectorAll('.delete-link').forEach(link => {");
-  response->print("  link.addEventListener('click', function(event) {");
-  response->print("    event.preventDefault();");
-  response->print("    if (confirm('Are you sure you want to delete this file?')) {");
-  response->print("      window.location.href = this.href;");
-  response->print("    }");
-  response->print("  });");
-  response->print("});");
-  response->print("</script>");
-  response->print("</div></body></html>");
-  request->send(response);
-}
-
 void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
   std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
   std::string file_name = Path::file_name(info.path);
-
-  response->print("<tr>");
-  response->printf("<td>%s</td>", file_name.c_str());
-  response->print("<td class='actions'>");
-  if (this->download_enabled_) {
-    response->printf("<a href='%s' download>Download</a>", uri.c_str());
+  response->print("<tr><td>");
+  if (info.is_directory) {
+    response->print("<a href=\"");
+    response->print(uri.c_str());
+    response->print("\">");
+    response->print(file_name.c_str());
+    response->print("</a>");
+  } else {
+    response->print(file_name.c_str());
   }
-  if (this->deletion_enabled_) {
-    response->printf("<a href='%s' class='delete-link'>Delete</a>", uri.c_str());
+  response->print("</td><td>");
+  if (!info.is_directory && this->download_enabled_) {
+    response->print("<button class=\"download-btn\" onClick=\"download_file('");
+    response->print(uri.c_str());
+    response->print("','");
+    response->print(file_name.c_str());
+    response->print("')\">Download</button>");
   }
-  response->print("</td>");
-  response->print("</tr>");
+  response->print("</td></tr>");
 }
 
-void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
-  if (!this->deletion_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
-    return;
-  }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
+void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
+                    "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
+                    "<style>"
+                    "body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 20px; }"
+                    "h1 { color: #4CAF50; }"
+                    "h2 { color: #555; }"
+                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
+                    "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
+                    "th { background-color: #4CAF50; color: white; }"
+                    "tr:hover { background-color: #f5f5f5; }"
+                    ".download-btn { background-color: #4CAF50; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; }"
+                    ".download-btn:hover { background-color: #45a049; }"
+                    "a { color: #4CAF50; text-decoration: none; }"
+                    "a:hover { text-decoration: underline; }"
+                    "</style>"
+                    "</head><body>"
+                    "<h1>SD Card Content</h1><h2>Folder "));
 
-  ESP_LOGD(TAG, "deleting file %s", path.c_str());
+  response->print(path.c_str());
+  response->print(F("</h2>"));
+  response->print(F("<a href=\"/"));
+  response->print(this->url_prefix_.c_str());
+  response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
+  auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
+  for (auto const &entry : entries)
+    write_row(response, entry);
 
-  if (this->sd_mmc_card_->is_directory(path)) {
-    request->send(400, "application/json", "{ \"error\": \"can't delete a directory\" }");
-    return;
-  }
+  response->print(F("</tbody></table>"
+                    "<script>"
+                    "function download_file(path, filename) {"
+                    "fetch(path).then(response => response.blob())"
+                    ".then(blob => {"
+                    "const link = document.createElement('a');"
+                    "link.href = URL.createObjectURL(blob);"
+                    "link.download = filename;"
+                    "link.click();"
+                    "}).catch(console.error);"
+                    "} "
+                    "</script>"
+                    "</body></html>"));
 
-  if (!this->sd_mmc_card_->delete_file(path)) {
-    request->send(500, "application/json", "{ \"error\": \"deleting file failed\" }");
-    return;
-  }
-
-  auto response = request->beginResponse(200, "application/json", "{ \"message\": \"file deleted\" }");
-  response->addHeader("Connection", "close");
   request->send(response);
 }
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"download is disabled\" }");
+    request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
 
-  ESP_LOGD(TAG, "downloading file %s", path.c_str());
-
-  std::vector<uint8_t> file_data = this->sd_mmc_card_->read_file(path);
-   if (file_data.empty()) {
-    request->send(404, "application/json", "{ \"error\": \"file not found\" }");
+  auto file = this->sd_mmc_card_->read_file(path);
+  if (file.size() == 0) {
+    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
-
-  AsyncWebServerResponse *response = request->beginResponse(
-      "application/octet-stream", file_data.size(),
-      [file_data](uint8_t *buffer, size_t len, size_t index) -> size_t {
-        if (index >= file_data.size()) {
-          return 0;
-        }
-        size_t bytes_to_copy = std::min(len, file_data.size() - index);
-        memcpy(buffer, file_data.data() + index, bytes_to_copy);
-        return bytes_to_copy;
-      });
+#ifdef USE_ESP_IDF
+  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
+#else
+  auto *response = request->beginResponseStream("application/octet", file.size());
+  response->write(file.data(), file.size());
+#endif
 
   request->send(response);
 }
 
-std::vector<sd_mmc_card::FileInfo> SDFileServer::list_dir(const std::string& path) const {
-    std::vector<sd_mmc_card::FileInfo> file_list;
-    // Assuming that sd_mmc_card_ has a method to get the list of files in a directory
-    // The method should return a vector of FileInfo
-    file_list = this->sd_mmc_card_->get_file_list(path);
-    return file_list;
+std::string SDFileServer::build_prefix() const {
+  if (this->url_prefix_.length() == 0 || this->url_prefix_.at(0) != '/')
+    return "/" + this->url_prefix_;
+  return this->url_prefix_;
 }
-
-std::string SDFileServer::build_prefix() const { return "/" + this->url_prefix_; }
 
 std::string SDFileServer::extract_path_from_url(std::string const &url) const {
   std::string prefix = this->build_prefix();
-  if (url.size() < prefix.size())
-    return "";
-  return url.substr(prefix.size());
+  return url.substr(prefix.size(), url.size() - prefix.size());
 }
 
-std::string SDFileServer::build_absolute_path(std::string path) const {
-  if (Path::is_absolute(path))
-    return path;
+std::string SDFileServer::build_absolute_path(std::string relative_path) const {
+  if (relative_path.size() == 0)
+    return this->root_path_;
 
-  return Path::join(this->root_path_, path);
+  std::string absolute = Path::join(this->root_path_, relative_path);
+  return absolute;
 }
 
 std::string Path::file_name(std::string const &path) {
   size_t pos = path.rfind(Path::separator);
-  if (pos == std::string::npos) {
-    return path;
+  if (pos != std::string::npos) {
+    return path.substr(pos + 1);
   }
-  return path.substr(pos + 1);
+  return "";
 }
 
-bool Path::is_absolute(std::string const &path) { return !path.empty() && path[0] == Path::separator; }
+bool Path::is_absolute(std::string const &path) { return path.size() && path[0] == separator; }
 
-bool Path::trailing_slash(std::string const &path) { return !path.empty() && path[path.size() - 1] == Path::separator; }
+bool Path::trailing_slash(std::string const &path) { return path.size() && path[path.length() - 1] == separator; }
 
-std::string Path::join(std::string const &a, std::string const &b) {
-  if (a.empty())
-    return b;
-  if (b.empty())
-    return a;
-
-  bool a_trail = Path::trailing_slash(a);
-  bool b_abs = Path::is_absolute(b);
-
-  if (a_trail && b_abs) {
-    return a.substr(0, a.length() - 1) + b;
+std::string Path::join(std::string const &first, std::string const &second) {
+  std::string result = first;
+  if (!trailing_slash(first) && !is_absolute(second)) {
+    result.push_back(separator);
   }
-  if (!a_trail && !b_abs) {
-    return a + Path::separator + b;
+  if (trailing_slash(first) && is_absolute(second)) {
+    result.pop_back();
   }
-
-  return a + b;
+  result.append(second);
+  return result;
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
-    if (str_startswith(path, root)) {
-        return path.substr(root.length());
-    }
+  if (!str_startswith(path, root))
     return path;
+  if (path.size() == root.size() || path.size() < 2)
+    return "/";
+  return path.erase(0, root.size());
 }
 
 }  // namespace sd_file_server
