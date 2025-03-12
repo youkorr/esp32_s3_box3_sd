@@ -4,6 +4,7 @@
 #include "esphome/core/helpers.h"
 #include <algorithm>
 #include <cstdio>
+#include <sys/stat.h>
 
 namespace esphome {
 namespace sd_file_server {
@@ -238,15 +239,33 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
+#ifdef USE_ESP_IDF
+  FILE* f = fopen(path.c_str(), "rb");
+  if (!f) {
+    request->send(404, "text/plain", "File not found");
+    return;
+  }
+
+  fseek(f, 0, SEEK_END);
+  size_t file_size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  auto *response = request->beginResponseStream("application/octet-stream", file_size);
+  uint8_t buffer[1024];
+  size_t bytes_read;
+  
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+    response->write(buffer, bytes_read);
+  }
+  
+  fclose(f);
+#else
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
-#else
-  auto *response = request->beginResponseStream("application/octet", file.size());
+  auto *response = request->beginResponseStream("application/octet-stream", file.size());
   response->write(file.data(), file.size());
 #endif
 
@@ -258,10 +277,30 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request, const std::stri
     request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
     return;
   }
-  if (!this->sd_mmc_card_->delete_file(path)) {
-    request->send(500, "application/json", "{ \"error\": \"deleting file failed\" }");
+
+#ifdef USE_ESP_IDF
+  struct stat st;
+  if (stat(path.c_str(), &st) != 0) {
+    request->send(404, "application/json", "{ \"error\": \"file not found\" }");
     return;
   }
+
+  if (S_ISDIR(st.st_mode)) {
+    request->send(400, "application/json", "{ \"error\": \"cannot delete directories\" }");
+    return;
+  }
+
+  if (unlink(path.c_str()) != 0) {
+    request->send(500, "application/json", "{ \"error\": \"deletion failed\" }");
+    return;
+  }
+#else
+  if (!this->sd_mmc_card_->delete_file(path)) {
+    request->send(500, "application/json", "{ \"error\": \"deletion failed\" }");
+    return;
+  }
+#endif
+
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
 }
 
@@ -292,9 +331,13 @@ std::string Path::file_name(std::string const &path) {
   return "";
 }
 
-bool Path::is_absolute(std::string const &path) { return path.size() && path[0] == separator; }
+bool Path::is_absolute(std::string const &path) { 
+  return path.size() && path[0] == separator; 
+}
 
-bool Path::trailing_slash(std::string const &path) { return path.size() && path[path.length() - 1] == separator; }
+bool Path::trailing_slash(std::string const &path) { 
+  return path.size() && path[path.length() - 1] == separator; 
+}
 
 std::string Path::join(std::string const &first, std::string const &second) {
   std::string result = first;
@@ -318,6 +361,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
