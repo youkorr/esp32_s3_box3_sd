@@ -40,11 +40,8 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const;
   void handle_index(AsyncWebServerRequest *, std::string const &) const;
   void handle_get(AsyncWebServerRequest *) const;
-  void handle_delete(AsyncWebServerRequest *);
+  void handle_delete(AsyncWebServerRequest *request, const std::string& path) const;
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
-
-  std::string format_file_size(size_t bytes) const;
-    std::string get_file_type(const std::string& filename) const;
 };
 
 struct Path {
