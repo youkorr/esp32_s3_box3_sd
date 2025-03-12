@@ -217,11 +217,14 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 #ifdef USE_ESP_IDF
   auto *response = request->beginResponse("application/octet-stream", file.size(), [](uint8_t *buffer, size_t maxLen, size_t index, void *ctx) -> size_t {
         std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
-        size_t to_send = std::min(maxLen, file->size() - index);
+        if (index >= file->size()) {
+            return 0;
+        }
+        size_t to_send = std::min(len, file->size() - index);
         memcpy(buffer, file->data() + index, to_send);
         return to_send;
     }, (void*)&file);
-  request->send(response);
+    request->send(response);
 #else
     AsyncWebServerResponse *response = request->beginResponseStream("application/octet-stream");
     response->write(file.data(), file.size());
@@ -257,7 +260,7 @@ void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::strin
         return;
     }
 #ifdef USE_ESP_IDF
-   auto *response = request->beginResponse(contentType.c_str(), file.size(), [](uint8_t *buffer, size_t len, size_t index, void *ctx) -> size_t {
+   AsyncWebServerResponse *response = request->beginResponse(contentType.c_str(), file.size(), [](uint8_t *buffer, size_t len, size_t index, void *ctx) -> size_t {
         std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
         if (index >= file->size()) {
             return 0;
@@ -266,7 +269,6 @@ void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::strin
         memcpy(buffer, file->data() + index, to_send);
         return to_send;
     }, (void*)&file);
-    response->setContentLength(file.size());
     request->send(response);
 #else
     AsyncWebServerResponse *response = request->beginResponseStream(contentType.c_str());
@@ -341,6 +343,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
