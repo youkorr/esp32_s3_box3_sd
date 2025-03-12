@@ -5,7 +5,9 @@
 #include <cstdio>        // Pour FILE, fopen, fclose, etc.
 #include <algorithm>     // Pour std::min
 #include <cstring>       // Pour strlen, strcpy
-#include <String.h>    // Pour la classe String d'Arduino
+#include <string>        // Pour std::string
+#include <Arduino.h>      // Pour les types Arduino si nécessaires
+#include <vector>
 
 namespace esphome {
 namespace sd_file_server {
@@ -25,7 +27,8 @@ void SDFileServer::setup() {
         request->send(200);
       },
       [this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
-        this->handleUpload(request, filename, index, data, len, final);
+        std::string filename_str(filename.c_str());
+        this->handleUpload(request, filename_str, index, data, len, final);
       });
 }
 
@@ -69,7 +72,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   }
 }
 
-void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
+void SDFileServer::handleUpload(AsyncWebServerRequest *request, const std::string &filename, size_t index, uint8_t *data,
                                 size_t len, bool final) {
   if (!this->upload_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
@@ -78,11 +81,11 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
-  std::string file_name(filename.c_str());
+  std::string file_name = filename;
   std::string full_path = Path::join(path, file_name);
 
-  ESP_LOGD(TAG, "Upload request: %s, File: %s, Index: %u, Length: %u, Final: %d", path.c_str(), file_name.c_str(),
-           index, len, final);
+  ESP_LOGD(TAG, "Upload request: %s, File: %s, Index: %u, Length: %u, Final: %d",
+           path.c_str(), file_name.c_str(), index, len, final);
 
   if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
     ESP_LOGE(TAG, "Upload failed: destination %s is not a directory", path.c_str());
@@ -219,7 +222,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   request->send(response);
 }
 
-// Corrected handle_delete signature
 void SDFileServer::handle_delete(AsyncWebServerRequest *request, std::string const &path) {
     ESP_LOGD(TAG, "Handling delete request for path: %s", path.c_str());
     if (!this->deletion_enabled_) {
