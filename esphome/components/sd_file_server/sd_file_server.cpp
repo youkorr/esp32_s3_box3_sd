@@ -59,15 +59,15 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 
   static std::vector<uint8_t> file_data;
 
-  if (index == 0) { // Start of the upload
+  if (index == 0) { // Début de l'upload
     file_data.clear();
   }
 
   file_data.insert(file_data.end(), data, data + len);
 
-  if (final) { // End of the upload
+  if (final) { // Fin de l'upload
     String path = request->url();
-    if (path.ends_with("/")) {
+    if (path.endsWith("/")) {
       path += filename;
     }
     this->sd_mmc_card_->append_file(path.c_str(), file_data.data(), file_data.size());
@@ -81,7 +81,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<html><body><table>");
   response->print("<tr><th>Name</th><th>Size</th><th>Type</th></tr>");
 
-  auto files = this->sd_mmc_card_->list_directory_file_info(path.c_str(), /*depth=*/1);
+  auto files = this->sd_mmc_card_->list_directory_file_info(path.c_str(), 1);
   
   for (auto &file : files) {
     this->write_row(response, file);
@@ -89,7 +89,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 
   response->print("</table></body></html>");
   
-  request->send(response); // Send the response
+  request->send(response);
 }
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
@@ -106,18 +106,13 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   }
 
   auto response = request->beginResponseStream("application/octet-stream");
+  response->addHeader("Content-Disposition", 
+    ("attachment; filename=\"" + path.substr(path.find_last_of('/') + 1) + "\"").c_str());
+
+  // Utilisation de print() avec conversion explicite
+  response->print(reinterpret_cast<const char*>(file_data.data()), file_data.size());
   
-  response->addHeader("Content-Disposition", ("attachment; filename=\"" + path.substr(path.find_last_of('/') + 1) + "\"").c_str());
-
-  // Write data in chunks to avoid memory issues for large files
-  size_t chunk_size = 4096; // Adjust chunk size as needed
-  for (size_t i = 0; i < file_data.size(); i += chunk_size) {
-    size_t remaining = file_data.size() - i;
-    size_t send_size = std::min(chunk_size, remaining);
-    response->write(file_data.data() + i, send_size);
-  }
-
-  request->send(response); // Send the response
+  request->send(response); // Envoi final via la requête
 }
 
 } // namespace sd_file_server
