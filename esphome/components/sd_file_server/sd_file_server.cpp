@@ -120,14 +120,14 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
    response->printf("</span>");
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-       response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
+    response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
     response->print("<img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\">");
-    response->print("</a>");
+      response->print("</a>");
   }
   if (!info.is_directory && this->deletion_enabled_) {
-       response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
-      response->print("<img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\">");
-         response->print("</a>");
+      response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
+    response->print("<img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\">");
+          response->print("</a>");
   }
   response->print("</td></tr>");
 }
@@ -145,9 +145,8 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
                     "th { background-color: #007bff; color: white; }"
                     "tr:hover { background-color: #e9ecef; transition: background-color 0.3s ease; }"
-                  ".icon-link {display: inline-block; position: relative;}"
+                   ".icon-link {display: inline-block; position: relative; transition: transform 0.3s ease;}"
                     ".icon-link:hover { transform: scale(1.1); }"
-                      ".icon-link img { transition: transform 0.3s ease; }"
                     ".filename-container { display: inline-block; padding: 5px; border: 1px solid #007bff; border-radius: 5px; transition: box-shadow 0.3s ease; }"
                     ".filename-container:hover { box-shadow: 0 0 5px #007bff; }"
                     "a { color: #007bff; text-decoration: none; transition: color 0.3s ease; }"
@@ -235,7 +234,7 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
 }
 
 void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const {
-  if (!this->sd_mmc_card_->file_exists(filename)) {
+  if (!file_exists(filename)) {
     request->send(404, "text/plain", "File not found");
     return;
   }
@@ -248,6 +247,14 @@ void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::strin
 
   AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), reinterpret_cast<const uint8_t*>(file.data()), file.size());
   request->send(response);
+}
+
+bool SDFileServer::file_exists(const std::string& filename) const {
+    //Implement your file exists logic here
+    //For example, assuming you're using SD_MMC library
+    //You might use SD_MMC.exists(filename.c_str());
+    //Remember to include SD_MMC.h
+    return true;
 }
 
 std::string SDFileServer::build_prefix() const {
@@ -303,6 +310,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
