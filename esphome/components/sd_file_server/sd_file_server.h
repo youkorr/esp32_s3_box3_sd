@@ -15,7 +15,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void dump_config() override;
   bool canHandle(AsyncWebServerRequest *request) override;
   void handleRequest(AsyncWebServerRequest *request) override;
-  void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
+  void handleUpload(AsyncWebServerRequest *request, const std::string &filename, size_t index, uint8_t *data, size_t len,
                     bool final) override;
   bool isRequestHandlerTrivial() override { return false; }
 
@@ -42,7 +42,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const;
   void handle_index(AsyncWebServerRequest *, std::string const &) const;
   void handle_get(AsyncWebServerRequest *) const;
-  void handle_delete(AsyncWebServerRequest *, std::string const &path);  // Correct signature
+  void handle_delete(AsyncWebServerRequest *, std::string const &path);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
 };
 
@@ -66,6 +66,7 @@ struct Path {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
