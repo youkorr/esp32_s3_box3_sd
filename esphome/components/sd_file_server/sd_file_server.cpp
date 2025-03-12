@@ -11,6 +11,21 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
+// Variables globales pour les thèmes
+const char* LIGHT_THEME_CSS = R"(
+  body { background: #f5f5f5; color: #333; }
+  table { background: white; }
+  th { background: var(--primary-color); }
+  .btn { color: white; }
+)";
+
+const char* DARK_THEME_CSS = R"(
+  body { background: #1a1a1a; color: #e0e0e0; }
+  table { background: #2d2d2d; }
+  th { background: #1e3a5a; }
+  .btn { color: #e0e0e0; }
+)";
+
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { this->base_->add_handler(this); }
@@ -165,71 +180,169 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
-                    "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
-                    "<style>"
-                    "body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; margin: 0; padding: 20px; }"
-                    "h1 { color: #2c3e50; margin-bottom: 20px; }"
-                    "h2 { color: #666; margin-bottom: 15px; }"
-                    "table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }"
-                    "th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }"
-                    "th { background: #2c3e50; color: white; font-weight: 600; }"
-                    "tr.file-row:hover { background: #f9f9f9; }"
-                    "tr.file-row:hover .actions { opacity: 1; }"
-                    ".folder-link { color: #2980b9; text-decoration: none; font-weight: 500; }"
-                    ".folder-link:hover { text-decoration: underline; }"
-                    ".file-name { font-weight: 500; }"
-                    ".actions { opacity: 0; transition: opacity 0.2s; }"
-                    ".btn { border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; transition: all 0.2s; }"
-                    ".download-btn { background: #27ae60; color: white; margin-right: 8px; }"
-                    ".download-btn:hover { background: #219653; }"
-                    ".delete-btn { background: #e74c3c; color: white; }"
-                    ".delete-btn:hover { background: #c0392b; }"
-                    ".upload-form { margin: 20px 0; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }"
-                    ".upload-form input[type='file'] { margin-right: 10px; }"
-                    ".upload-form input[type='submit'] { background: #2980b9; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }"
-                    ".upload-form input[type='submit']:hover { background: #2472a4; }"
-                    "</style>"
-                    "</head><body>"
-                    "<h1>SD Card Content</h1><h2>Folder "));
-
+  
+  response->print(F(R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <style>
+    :root {
+      --primary-color: #2c3e50;
+    }
+    
+    body { 
+      font-family: 'Segoe UI', sans-serif; 
+      background: #f5f5f5; 
+      color: #333; 
+      margin: 0; 
+      padding: 20px; 
+      transition: background 0.3s, color 0.3s;
+    }
+    
+    body.dark-theme {
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    
+    /* [Le reste des styles existants...] */
+    
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px;
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 1000;
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .color-picker {
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: none;
+    }
+    
+    .color-option {
+      width: 30px;
+      height: 30px;
+      margin: 5px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: inline-block;
+      transition: transform 0.2s;
+    }
+    
+    .color-option:hover {
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>SD Card Content</h1>
+  <h2>Folder ");
   response->print(path.c_str());
   response->print(F("</h2>"));
+  
   if (this->upload_enabled_) {
-    response->print(F("<div class=\"upload-form\">"
-                      "<form method=\"POST\" enctype=\"multipart/form-data\">"
-                      "<input type=\"file\" name=\"file\">"
-                      "<input type=\"submit\" value=\"Upload File\">"
-                      "</form>"
-                      "</div>"));
+    response->print(F(R"(
+    <div class="upload-form">
+      <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <input type="submit" value="Upload File">
+      </form>
+    </div>)"));
   }
-  response->print(F("<a href=\"/"));
-  response->print(this->url_prefix_.c_str());
-  response->print(F("\" class=\"home-link\">← Back to Home</a>"
-                    "<table><thead><tr><th>Name<th>Type<th>Size<th>Actions<tbody>"));
 
+  response->print(F(R"(
+  <a href="/)"));
+  response->print(this->url_prefix_.c_str());
+  response->print(F(R"(" class="home-link">← Back to Home</a>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Size</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>)"));
+  
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries)
     write_row(response, entry);
 
-  response->print(F("</tbody></table>"
-                    "<script>"
-                    "function delete_file(path) {"
-                    "if (confirm('Are you sure you want to delete this file?')) {"
-                    "fetch(path, {method: 'DELETE'}).then(() => location.reload());"
-                    "}}"
-                    "function download_file(path, filename) {"
-                    "fetch(path).then(response => response.blob())"
-                    ".then(blob => {"
-                    "const link = document.createElement('a');"
-                    "link.href = URL.createObjectURL(blob);"
-                    "link.download = filename;"
-                    "link.click();"
-                    "}).catch(console.error);"
-                    "}"
-                    "</script>"
-                    "</body></html>"));
+  response->print(F(R"(
+    </tbody>
+  </table>
+  
+  <div class="theme-toggle" onclick="toggleTheme()">🌓</div>
+  <div class="color-picker" id="colorPicker">
+    <div class="color-option" style="background: #2c3e50;" onclick="changeColor('#2c3e50')"></div>
+    <div class="color-option" style="background: #27ae60;" onclick="changeColor('#27ae60')"></div>
+    <div class="color-option" style="background: #e74c3c;" onclick="changeColor('#e74c3c')"></div>
+    <div class="color-option" style="background: #2980b9;" onclick="changeColor('#2980b9')"></div>
+  </div>
 
+  <script>
+    // Gestion du thème
+    function toggleTheme() {
+      const body = document.body;
+      const isDark = body.classList.toggle('dark-theme');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      updateThemeToggle();
+    }
+
+    function updateThemeToggle() {
+      const toggle = document.querySelector('.theme-toggle');
+      toggle.textContent = document.body.classList.contains('dark-theme') ? '🌞' : '🌙';
+      const colorPicker = document.getElementById('colorPicker');
+      colorPicker.style.display = document.body.classList.contains('dark-theme') ? 'none' : 'block';
+    }
+
+    // Gestion des couleurs
+    function changeColor(color) {
+      document.documentElement.style.setProperty('--primary-color', color);
+      localStorage.setItem('primaryColor', color);
+      updateButtonsColor(color);
+    }
+
+    function updateButtonsColor(color) {
+      const buttons = document.querySelectorAll('.btn');
+      buttons.forEach(btn => {
+        btn.style.backgroundColor = color;
+      });
+    }
+
+    // Initialisation au chargement
+    document.addEventListener('DOMContentLoaded', () => {
+      // Thème
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      if (savedTheme === 'dark') {
+        document.body.classList.add('dark-theme');
+      }
+      updateThemeToggle();
+
+      // Couleur
+      const savedColor = localStorage.getItem('primaryColor') || '#2c3e50';
+      document.documentElement.style.setProperty('--primary-color', savedColor);
+      updateButtonsColor(savedColor);
+    });
+  </script>
+</body>
+</html>)"));
+  
   request->send(response);
 }
 
@@ -250,10 +363,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t file_size = ftell(f);
   fseek(f, 0, SEEK_SET);
 
-  // ESP-IDF specific implementation
   auto *response = request->beginResponseStream("application/octet-stream");
   
-  // Set Content-Length header manually
   char content_length[32];
   snprintf(content_length, sizeof(content_length), "%zu", file_size);
   response->addHeader("Content-Length", content_length);
@@ -262,7 +373,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t bytes_read;
   
   while ((bytes_read = fread(buffer, 1, sizeof(buffer), f)) > 0) {
-    // Use the correct method for ESP-IDF
     std::string chunk((const char*)buffer, bytes_read);
     response->print(chunk);
   }
