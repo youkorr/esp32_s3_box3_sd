@@ -28,23 +28,24 @@ std::string format_size(size_t size) {
 // Map file extensions to their types
 std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
-    {"mp3", "Audio"},
-    {"wav", "Audio"},
-    {"png", "Image"},
-    {"jpg", "Image"},
-    {"jpeg", "Image"},
-    {"bmp", "Image"},
-    {"txt", "Text"},
-    {"log", "Text"},
-    {"csv", "Text"},
-    {"html", "Web"},
-    {"css", "Web"},
-    {"js", "Web"},
-    {"json", "Data"},
-    {"xml", "Data"},
-    {"zip", "Archive"},
-    {"gz", "Archive"},
-    {"tar", "Archive"}
+    {"mp3", "Audio (MP3)"},
+    {"wav", "Audio (WAV)"},
+    {"flac", "Audio (FLAC)"},
+    {"png", "Image (PNG)"},
+    {"jpg", "Image (JPG)"},
+    {"jpeg", "Image (JPEG)"},
+    {"bmp", "Image (BMP)"},
+    {"txt", "Text (TXT)"},
+    {"log", "Text (LOG)"},
+    {"csv", "Text (CSV)"},
+    {"html", "Web (HTML)"},
+    {"css", "Web (CSS)"},
+    {"js", "Web (JS)"},
+    {"json", "Data (JSON)"},
+    {"xml", "Data (XML)"},
+    {"zip", "Archive (ZIP)"},
+    {"gz", "Archive (GZ)"},
+    {"tar", "Archive (TAR)"}
   };
 
   size_t dot_pos = filename.rfind('.');
@@ -54,6 +55,7 @@ std::string get_file_type(const std::string &filename) {
     if (it != file_types.end()) {
       return it->second;
     }
+    return "File (" + ext + ")"; // Affiche l'extension si elle n'est pas dans la liste
   }
   return "File";
 }
