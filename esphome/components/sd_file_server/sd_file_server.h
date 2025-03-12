@@ -43,6 +43,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void handle_delete(AsyncWebServerRequest *);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
   void handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const;
+  bool file_exists(const std::string& filename) const;
 };
 
 struct Path {
