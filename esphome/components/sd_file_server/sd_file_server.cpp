@@ -8,8 +8,8 @@ namespace sd_file_server {
 
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  response->printf("<td>%s</td>", info.file_name.c_str());  // Utilisation de 'file_name' au lieu de 'name'
-  response->printf("<td>%d</td>", info.file_size);
+  response->printf("<td>%s</td>", info.name.c_str());  // Corrected field name: 'name'
+  response->printf("<td>%d</td>", info.size);          // Corrected field name: 'size'
   response->print("</tr>");
 }
 
@@ -20,7 +20,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table border='1'>");
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
-  auto files = this->sd_mmc_card_->get_directory_contents(path);  // Utilisation de 'get_directory_contents' au lieu de 'list_files'
+  auto files = this->sd_mmc_card_->list_files(path);  // Corrected method name: 'list_files'
   for (auto const &file : files) {
     this->write_row(response, file);
   }
@@ -121,7 +121,7 @@ bool Path::trailing_slash(std::string const &path) {
 std::string Path::join(std::string const &path1, std::string const &path2) {
   if (path1.empty()) return path2;
   if (path2.empty()) return path1;
-  
+
   std::string result = path1;
   if (!trailing_slash(path1) && !is_absolute(path2)) {
     result += separator;
