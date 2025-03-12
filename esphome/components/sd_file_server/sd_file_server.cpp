@@ -250,7 +250,14 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   size_t file_size = ftell(f);
   fseek(f, 0, SEEK_SET);
 
-  auto *response = request->beginResponseStream("application/octet-stream", file_size);
+  // ESP-IDF specific implementation with single argument
+  auto *response = request->beginResponseStream("application/octet-stream");
+  
+  // Set Content-Length header manually
+  char content_length[32];
+  snprintf(content_length, sizeof(content_length), "%zu", file_size);
+  response->addHeader("Content-Length", content_length);
+
   uint8_t buffer[1024];
   size_t bytes_read;
   
@@ -361,6 +368,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
