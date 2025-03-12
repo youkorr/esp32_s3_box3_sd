@@ -6,22 +6,15 @@
 namespace esphome {
 namespace sd_file_server {
 
-static const char *TAG = "sd_file_server";
-
-// Modify this method to use the actual structure of FileInfo
+// Correction de la signature de write_row
 void SDFileServer::write_row(AsyncResponseStream *response, const sd_mmc_card::FileInfo &info) const {
   response->print("<tr>");
-  
-  // Adjust these lines based on what fields actually exist in FileInfo
-  // For example, if FileInfo has 'name' instead of 'filename'
-  response->printf("<td>%s</td>", info.name.c_str());  // Changed from filename to name
-  
-  // Similarly, check if 'size' exists or if it has a different name
+  response->printf("<td>%s</td>", info.filename.c_str());
   response->printf("<td>%d</td>", info.size);
-  
   response->print("</tr>");
 }
 
+// Correction de handle_index
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   auto *response = request->beginResponseStream("text/html");
   response->print("<html><head><title>SD File Server</title></head><body>");
@@ -29,10 +22,8 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   response->print("<table border='1'>");
   response->print("<tr><th>Name</th><th>Size</th></tr>");
 
-  // Use whatever method is available in SdMmc for listing files
-  // Example: if get_files exists instead of list_files
-  auto files = this->sd_mmc_card_->get_files(path);  // Changed from list_files to get_files
-  
+  // Utilisation de la méthode correcte pour lister les fichiers
+  auto files = this->sd_mmc_card_->get_files(path);
   for (auto const &file : files) {
     this->write_row(response, file);
   }
@@ -41,6 +32,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   request->send(response);
 }
 
+// Le reste du fichier reste inchangé
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() {
