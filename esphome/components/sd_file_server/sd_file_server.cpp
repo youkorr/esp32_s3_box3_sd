@@ -57,32 +57,23 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     return;
   }
 
-  static sd_mmc_card::FileHandle upload_file;
+  static std::vector<uint8_t> file_data;
+  
   if (index == 0) {
+    file_data.clear();
+  }
+
+  file_data.insert(file_data.end(), data, data + len);
+
+  if (final) {
     String path = request->url();
     if (path.ends_with("/")) {
       path += filename;
     }
-    upload_file = this->sd_mmc_card_->append_file(path.c_str());
-    if (!upload_file) {
-      request->send(500);
-      return;
-    }
-  }
-
-  if (upload_file.write(data, len) != len) {
-    upload_file.close();
-    request->send(500);
-    return;
-  }
-
-  if (final) {
-    upload_file.close();
+    this->sd_mmc_card_->append_file(path.c_str(), file_data.data(), file_data.size());
     request->send(200);
   }
 }
-
-// ... [rest of the methods remain unchanged until handle_index]
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   auto response = request->beginResponseStream("text/html");
@@ -104,28 +95,20 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  auto file = this->sd_mmc_card_->append_file(path.c_str());
-  if (!file) {
+  std::vector<uint8_t> file_data;
+  if (!this->sd_mmc_card_->read_file(path.c_str(), file_data)) {
     request->send(404);
     return;
   }
 
   auto response = request->beginResponseStream("application/octet-stream");
   response->addHeader("Content-Disposition", ("attachment; filename=\"" + path.substr(path.find_last_of('/') + 1) + "\"").c_str());
-  
-  char buffer[512];
-  size_t bytes_read;
-  while ((bytes_read = file.read(buffer, sizeof(buffer))) > 0) {
-    response->write((uint8_t*)buffer, bytes_read);
-  }
-  
-  file.close();
+  response->write(file_data.data(), file_data.size());
   request->send(response);
 }
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
