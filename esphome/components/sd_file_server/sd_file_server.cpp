@@ -30,7 +30,6 @@ std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
     {"mp3", "Audio (MP3)"},
     {"wav", "Audio (WAV)"},
-    {"flac", "Audio (FLAC)"},
     {"png", "Image (PNG)"},
     {"jpg", "Image (JPG)"},
     {"jpeg", "Image (JPEG)"},
@@ -289,7 +288,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       response->print("<a href=\"");
       response->print(this->build_prefix().c_str());
       response->print(current_path.c_str());
-      response->print("\">");
+      response->print("\">📁 ");
       response->print(part.c_str());
       response->print("</a> > ");
     }
@@ -463,6 +462,7 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
