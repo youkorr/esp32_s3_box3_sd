@@ -6,7 +6,7 @@
 namespace esphome {
 namespace sd_file_server {
 
-static const char *TAG = "sd_file_server";  // Correction de la déclaration de TAG
+extern const char *const TAG;  // Déclaration externe
 
 class SDFileServer : public Component, public AsyncWebHandler {
  public:
