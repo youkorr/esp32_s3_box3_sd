@@ -123,14 +123,14 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
    response->printf("</span>");
   response->print("</td><td>");
   if (!info.is_directory && this->download_enabled_) {
-    response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
+       response->printf("<a href=\"%s\" class=\"icon-link download-btn\">", uri.c_str());
     response->print("<img src=\"download.png\" alt=\"Download\" style=\"width: 20px; height: 20px;\">");
     response->print("</a>");
   }
   if (!info.is_directory && this->deletion_enabled_) {
-    response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
+      response->printf("<a href=\"%s\" class=\"icon-link delete-btn\" onclick=\"return confirm('Are you sure?')\">", uri.c_str());
     response->print("<img src=\"delete.png\" alt=\"Delete\" style=\"width: 20px; height: 20px;\">");
-      response->print("</a>");
+          response->print("</a>");
   }
   response->print("</td></tr>");
 }
@@ -213,13 +213,14 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 #ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
+  request->send(200, "application/octet-stream", (const char*)file.data());
 #else
-  auto *response = request->beginResponseStream("application/octet", file.size());
+  AsyncWebServerResponse *response = request->beginResponseStream("application/octet", file.size());
   response->write(file.data(), file.size());
+  request->send(response);
 #endif
 
-  request->send(response);
+
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
@@ -237,19 +238,22 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
 }
 
 void SDFileServer::handle_image(AsyncWebServerRequest *request, const std::string& filename, const std::string& contentType) const {
-  if (!file_exists(filename)) {
+   if (!file_exists(filename)) {
     request->send(404, "text/plain", "File not found");
     return;
   }
-
-  auto file = this->sd_mmc_card_->read_file(filename);
-  if (file.empty()) {
-    request->send(500, "text/plain", "Failed to read file");
-    return;
-  }
-
-  AsyncWebServerResponse *response = request->beginResponse(200, contentType.c_str(), file.data(), file.size());
-  request->send(response);
+    auto file = this->sd_mmc_card_->read_file(filename);
+    if (file.empty()) {
+        request->send(500, "text/plain", "Failed to read file");
+        return;
+    }
+    AsyncWebServerResponse *response = request->beginResponse(contentType.c_str(), file.size(), [](uint8_t *buf, size_t maxLen, size_t index, void *ctx) -> size_t {
+        std::vector<uint8_t> *file = reinterpret_cast<std::vector<uint8_t> *>(ctx);
+        size_t to_send = std::min(maxLen, file->size() - index);
+        memcpy(buf, file->data() + index, to_send);
+        return to_send;
+    }, (void*) &file);
+    request->send(response);
 }
 
 bool SDFileServer::file_exists(const std::string& filename) const {
