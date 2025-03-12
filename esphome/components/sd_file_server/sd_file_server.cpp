@@ -17,7 +17,9 @@ void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
   ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
   ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
+  ESP_LOGCONFIG(TAG, "  Deletion Enabled : %s", TRUEFALSE(this->deletion_enabled_));
   ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
+  ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
@@ -111,25 +113,32 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
     response->print(file_name.c_str());
     response->print("')\">Download</button>");
   }
+    if (!info.is_directory && this->deletion_enabled_) {
+    response->print("<button class=\"delete-btn\" onClick=\"delete_file('");
+    response->print(uri.c_str());    
+    response->print("')\">Delete</button>");
+  }
   response->print("</td></tr>");
 }
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
+   response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
                     "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
                     "<style>"
-                    "body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 20px; }"
-                    "h1 { color: #4CAF50; }"
-                    "h2 { color: #555; }"
-                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; }"
+                    "body { font-family: Arial, sans-serif; background-color: #f0f0f0; color: #333; margin: 0; padding: 20px; }"
+                    "h1 { color: #007bff; }"
+                    "h2 { color: #666; }"
+                    "table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }"
                     "th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }"
-                    "th { background-color: #4CAF50; color: white; }"
-                    "tr:hover { background-color: #f5f5f5; }"
-                    ".download-btn { background-color: #4CAF50; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; }"
-                    ".download-btn:hover { background-color: #45a049; }"
-                    "a { color: #4CAF50; text-decoration: none; }"
-                    "a:hover { text-decoration: underline; }"
+                    "th { background-color: #007bff; color: white; }"
+                    "tr:hover { background-color: #f5f5f5; transition: background-color 0.3s ease; }"
+                    ".download-btn, .delete-btn { background-color: #28a745; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; transition: background-color 0.3s ease; margin-right: 5px; }"
+                    ".download-btn:hover { background-color: #218838; }"
+                     ".delete-btn { background-color: #dc3545; }"
+                    ".delete-btn:hover { background-color: #c82333; }"
+                    "a { color: #007bff; text-decoration: none; transition: color 0.3s ease; }"
+                    "a:hover { text-decoration: underline; color: #0056b3; }"
                     "</style>"
                     "</head><body>"
                     "<h1>SD Card Content</h1><h2>Folder "));
@@ -143,7 +152,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   for (auto const &entry : entries)
     write_row(response, entry);
 
-  response->print(F("</tbody></table>"
+ response->print(F("</tbody></table>"
                     "<script>"
                     "function download_file(path, filename) {"
                     "fetch(path).then(response => response.blob())"
@@ -153,7 +162,20 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "link.download = filename;"
                     "link.click();"
                     "}).catch(console.error);"
-                    "} "
+                    "}"
+                      "function delete_file(path) {"
+                    "fetch(path, { method: 'DELETE' })"
+                    ".then(response => {"
+                    "if (response.ok) {"
+                     "alert('File deleted successfully');"
+                      "window.location.reload();"
+                    "} else {"
+                    "alert('Failed to delete file');"
+                    "}"
+                    "}).catch(error => {"
+                    "alert('Error deleting file: ' + error);"
+                    "});"
+                    "}"
                     "</script>"
                     "</body></html>"));
 
@@ -182,7 +204,17 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
-  request->send(501, "text/plain", "Deleting files is not yet supported");
+   if (!this->deletion_enabled_) {
+    request->send(401, "application/json", "{ \"error\": \"deletion is disabled\" }");
+    return;
+  }
+  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+  std::string path = this->build_absolute_path(extracted);
+  if (!this->sd_mmc_card_->delete_file(path)) {
+    request->send(500, "application/json", "{ \"error\": \"deleting file failed\" }");
+    return;
+  }
+  request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
 }
 
 std::string SDFileServer::build_prefix() const {
@@ -235,6 +267,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
     return "/";
   return path.erase(0, root.size());
 }
+
 }  // namespace sd_file_server
 }  // namespace esphome
 
