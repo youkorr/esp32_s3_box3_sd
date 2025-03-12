@@ -14,12 +14,18 @@ static const char *TAG = "sd_file_server";
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
 void SDFileServer::setup() { 
-  this->base_->add_handler(this); 
-  // Configurer explicitement pour gérer les uploads de fichiers
-  this->base_->get_server()->onFileUpload([this](AsyncWebServerRequest *request, const String &filename, size_t index,
-                                               uint8_t *data, size_t len, bool final) {
-    this->handleUpload(request, filename, index, data, len, final);
-  });
+  this->base_->add_handler(this);
+  
+  // Nouvelle implémentation de la gestion des uploads
+  this->base_->get_server()->on(
+      "/upload", HTTP_POST,
+      [this](AsyncWebServerRequest *request) {
+        // Gestion de la fin de l'upload
+        request->send(200);
+      },
+      [this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+        this->handleUpload(request, filename, index, data, len, final);
+      });
 }
 
 void SDFileServer::dump_config() {
@@ -49,8 +55,6 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_POST && this->upload_enabled_) {
-      // Le traitement principal de l'upload se fait dans handleUpload
-      // On accepte juste la requête POST initiale ici
       request->send(200);
       return;
     }
@@ -59,7 +63,6 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     
-    // Si on arrive ici, la méthode n'est pas supportée
     request->send(405, "text/plain", "Method Not Allowed");
   }
 }
@@ -87,23 +90,15 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     return;
   }
 
-  // Pour le premier segment
   if (index == 0) {
     ESP_LOGD(TAG, "Starting upload of file %s to %s", file_name.c_str(), path.c_str());
-    // Supprimer le fichier s'il existe déjà pour éviter les conflits
     this->sd_mmc_card_->delete_file(full_path);
-    if (!this->sd_mmc_card_->write_file(full_path.c_str(), data, len)) {
-      ESP_LOGE(TAG, "Failed to write initial segment to %s", full_path.c_str());
-    }
+    this->sd_mmc_card_->write_file(full_path.c_str(), data, len);
     return;
   }
 
-  // Pour les segments suivants
-  if (!this->sd_mmc_card_->append_file(full_path.c_str(), data, len)) {
-    ESP_LOGE(TAG, "Failed to append segment to %s", full_path.c_str());
-  }
+  this->sd_mmc_card_->append_file(full_path.c_str(), data, len);
 
-  // Pour le segment final
   if (final) {
     ESP_LOGD(TAG, "Completed upload of file %s, total size: %u", file_name.c_str(), index + len);
     auto response = request->beginResponse(201, "application/json", "{ \"message\": \"upload success\" }");
@@ -276,15 +271,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
   ESP_LOGD(TAG, "Processing download request for: %s", path.c_str());
 
-#ifdef USE_ESP_IDF
-  // Implémentation améliorée pour ESP-IDF
-  struct stat st;
-  if (stat(path.c_str(), &st) != 0) {
-    ESP_LOGE(TAG, "File stat failed for: %s", path.c_str());
-    request->send(404, "text/plain", "File not found");
-    return;
-  }
-  
   FILE* f = fopen(path.c_str(), "rb");
   if (!f) {
     ESP_LOGE(TAG, "Failed to open file: %s", path.c_str());
@@ -292,71 +278,27 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  size_t file_size = st.st_size;
-  ESP_LOGD(TAG, "File size: %zu bytes", file_size);
+  fseek(f, 0, SEEK_END);
+  size_t file_size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  auto *response = request->beginResponse("application/octet-stream", file_size);
   
-  std::string filename = Path::file_name(path);
-  
-  // Utiliser directement le callback pour envoyer le fichier en streaming
-  AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file_size,
-      [f, file_size](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-        if (index >= file_size) {
-          return 0;  // Fin du fichier
-        }
-        
-        // Déterminer combien d'octets lire
-        size_t bytesToRead = std::min(maxLen, file_size - index);
-        
-        // Positionner le curseur du fichier
-        fseek(f, index, SEEK_SET);
-        
-        // Lire les données
-        size_t bytesRead = fread(buffer, 1, bytesToRead, f);
-        
-        if (bytesRead == 0 && bytesToRead > 0) {
-          ESP_LOGE(TAG, "Read error at position %zu", index);
-        }
-        
-        return bytesRead;
-      },
-      [f](void) {
-        // Callback de nettoyage
-        fclose(f);
-        ESP_LOGD(TAG, "File download completed, file closed");
-      }
-  );
-  
-  response->addHeader("Content-Disposition", ("attachment; filename=" + filename).c_str());
+  response->onData([f](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+    if (index >= file_size) {
+      return 0;
+    }
+    size_t bytesToRead = std::min(maxLen, file_size - index);
+    fseek(f, index, SEEK_SET);
+    return fread(buffer, 1, bytesToRead, f);
+  });
+
+  response->onClose([f]() {
+    fclose(f);
+    ESP_LOGD(TAG, "File download completed, file closed");
+  });
+
   request->send(response);
-#else
-  // Version non-ESP-IDF simplifiée et améliorée
-  ESP_LOGD(TAG, "Reading file with sd_mmc_card_->read_file");
-  auto file = this->sd_mmc_card_->read_file(path);
-  if (file.size() == 0) {
-    ESP_LOGE(TAG, "Failed to read file or file is empty");
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
-    return;
-  }
-  
-  std::string filename = Path::file_name(path);
-  size_t file_size = file.size();
-  
-  ESP_LOGD(TAG, "File read successfully, size: %zu bytes", file_size);
-  
-  AsyncWebServerResponse *response = request->beginResponse("application/octet-stream", file_size,
-      [file = std::move(file)](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-        size_t remaining = file.size() - index;
-        if (remaining == 0) return 0;
-        
-        size_t to_copy = std::min(maxLen, remaining);
-        memcpy(buffer, file.data() + index, to_copy);
-        return to_copy;
-      }
-  );
-  
-  response->addHeader("Content-Disposition", "attachment; filename=" + filename);
-  request->send(response);
-#endif
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request, const std::string& path) const {
@@ -367,44 +309,12 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request, const std::stri
   
   ESP_LOGD(TAG, "Processing delete request for: %s", path.c_str());
 
-#ifdef USE_ESP_IDF
-  struct stat st;
-  if (stat(path.c_str(), &st) != 0) {
-    ESP_LOGE(TAG, "File stat failed for: %s", path.c_str());
-    request->send(404, "application/json", "{ \"error\": \"file not found\" }");
-    return;
-  }
-
-  if (S_ISDIR(st.st_mode)) {
-    ESP_LOGE(TAG, "Cannot delete directory: %s", path.c_str());
-    request->send(400, "application/json", "{ \"error\": \"cannot delete directories\" }");
-    return;
-  }
-
-  if (unlink(path.c_str()) != 0) {
-    ESP_LOGE(TAG, "Deletion failed for: %s", path.c_str());
-    request->send(500, "application/json", "{ \"error\": \"deletion failed\" }");
-    return;
-  }
-
-  ESP_LOGD(TAG, "File deleted successfully: %s", path.c_str());
-#else
-  // Vérifier si c'est un répertoire
   if (this->sd_mmc_card_->is_directory(path)) {
     ESP_LOGE(TAG, "Cannot delete directory: %s", path.c_str());
     request->send(400, "application/json", "{ \"error\": \"cannot delete directories\" }");
     return;
   }
   
-  // Vérifier si le fichier existe
-  auto fileCheck = this->sd_mmc_card_->read_file(path);
-  if (fileCheck.size() == 0) {
-    ESP_LOGE(TAG, "File not found: %s", path.c_str());
-    request->send(404, "application/json", "{ \"error\": \"file not found\" }");
-    return;
-  }
-  
-  // Tenter de supprimer le fichier
   if (!this->sd_mmc_card_->delete_file(path)) {
     ESP_LOGE(TAG, "Deletion failed for: %s", path.c_str());
     request->send(500, "application/json", "{ \"error\": \"deletion failed\" }");
@@ -412,8 +322,6 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request, const std::stri
   }
   
   ESP_LOGD(TAG, "File deleted successfully: %s", path.c_str());
-#endif
-
   request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
 }
 
