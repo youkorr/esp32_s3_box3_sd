@@ -54,7 +54,7 @@ std::string get_file_type(const std::string &filename) {
     if (it != file_types.end()) {
       return it->second;
     }
-    return "File (" + ext + ")"; // Affiche l'extension si elle n'est pas dans la liste
+    return "File (" + ext + ")";
   }
   return "File";
 }
@@ -77,23 +77,34 @@ bool Path::trailing_slash(std::string const &path) {
 }
 
 std::string Path::join(std::string const &first, std::string const &second) {
+  if (first.empty()) return second;
+  if (second.empty()) return first;
+
   std::string result = first;
-  if (!trailing_slash(first) && !is_absolute(second)) {
-    result.push_back(separator);
-  }
-  if (trailing_slash(first) && is_absolute(second)) {
+  
+  if (trailing_slash(result)) {
     result.pop_back();
   }
-  result.append(second);
+
+  if (is_absolute(second)) {
+    result += second;
+  } else {
+    result += separator + second;
+  }
+
   return result;
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (!str_startswith(path, root))
     return path;
-  if (path.size() == root.size() || path.size() < 2)
-    return "/";
-  return path.erase(0, root.size());
+  
+  path.erase(0, root.size());
+  if (path.empty() || path[0] != separator) {
+    path = separator + path;
+  }
+  
+  return path;
 }
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
@@ -273,7 +284,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   <div class="container">
     <h1>SD Card Files</h1>
     <div class="breadcrumb">
-      <a href="/">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
+      <a href="/">Home</a> > )"));
 
   // Breadcrumb navigation
   std::string current_path = "/";
@@ -322,7 +333,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       </thead>
       <tbody>
   )"));
-  
+
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries) {
     std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
@@ -453,15 +464,36 @@ std::string SDFileServer::extract_path_from_url(std::string const &url) const {
 }
 
 std::string SDFileServer::build_absolute_path(std::string relative_path) const {
-  if (relative_path.size() == 0)
-    return this->root_path_;
+  // Normalize root path
+  std::string normalized_root = root_path_;
+  if (!Path::trailing_slash(normalized_root)) {
+    normalized_root += Path::separator;
+  }
 
-  std::string absolute = Path::join(this->root_path_, relative_path);
+  // Handle empty relative path
+  if (relative_path.empty()) {
+    return normalized_root;
+  }
+
+  // Remove leading slash from relative path if present
+  if (Path::is_absolute(relative_path)) {
+    relative_path.erase(0, 1);
+  }
+
+  // Join paths and normalize
+  std::string absolute = Path::join(normalized_root, relative_path);
+  
+  // Ensure trailing slash for directories
+  if (this->sd_mmc_card_->is_directory(absolute) && !Path::trailing_slash(absolute)) {
+    absolute += Path::separator;
+  }
+
   return absolute;
 }
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
