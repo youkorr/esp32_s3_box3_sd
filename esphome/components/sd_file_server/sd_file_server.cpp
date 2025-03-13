@@ -2,27 +2,24 @@
 #include "esphome/core/log.h"
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
-#include "esphome/core/hal.h"
+#include <map>
 
 namespace esphome {
 namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
-// Définir la taille du buffer pour le transfer chunked
-static const size_t CHUNK_SIZE = 4096;  // Taille optimale pour ESP32-S3
-
 // Helper function to format file sizes
 std::string format_size(size_t size) {
-  const char *units[] = {"B", "KB", "MB", "GB"};
+  const char* units[] = {"B", "KB", "MB", "GB"};
   size_t unit = 0;
   double s = static_cast<double>(size);
-
+  
   while (s >= 1024 && unit < 3) {
     s /= 1024;
     unit++;
   }
-
+  
   char buffer[32];
   snprintf(buffer, sizeof(buffer), "%.2f %s", s, units[unit]);
   return std::string(buffer);
@@ -31,11 +28,25 @@ std::string format_size(size_t size) {
 // Map file extensions to their types
 std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
-      {"mp3", "Audio (MP3)"},   {"wav", "Audio (WAV)"},   {"png", "Image (PNG)"},   {"jpg", "Image (JPG)"},
-      {"jpeg", "Image (JPEG)"}, {"bmp", "Image (BMP)"},   {"txt", "Text (TXT)"},   {"log", "Text (LOG)"},
-      {"csv", "Text (CSV)"},   {"html", "Web (HTML)"},   {"css", "Web (CSS)"},   {"js", "Web (JS)"},
-      {"json", "Data (JSON)"},  {"xml", "Data (XML)"},   {"zip", "Archive (ZIP)"}, {"gz", "Archive (GZ)"},
-      {"tar", "Archive (TAR)"}};
+    {"mp3", "Audio (MP3)"},
+    {"wav", "Audio (WAV)"},
+    {"png", "Image (PNG)"},
+    {"jpg", "Image (JPG)"},
+    {"jpeg", "Image (JPEG)"},
+    {"bmp", "Image (BMP)"},
+    {"txt", "Text (TXT)"},
+    {"log", "Text (LOG)"},
+    {"csv", "Text (CSV)"},
+    {"html", "Web (HTML)"},
+    {"css", "Web (CSS)"},
+    {"js", "Web (JS)"},
+    {"json", "Data (JSON)"},
+    {"xml", "Data (XML)"},
+    {"zip", "Archive (ZIP)"},
+    {"gz", "Archive (GZ)"},
+    {"tar", "Archive (TAR)"}
+  };
+
   size_t dot_pos = filename.rfind('.');
   if (dot_pos != std::string::npos) {
     std::string ext = filename.substr(dot_pos + 1);
@@ -43,8 +54,8 @@ std::string get_file_type(const std::string &filename) {
     if (it != file_types.end()) {
       return it->second;
     }
+    return "File (" + ext + ")";
   }
-  return "File (" + filename.substr(dot_pos + 1) + ")";
   return "File";
 }
 
@@ -57,37 +68,49 @@ std::string Path::file_name(std::string const &path) {
   return path;
 }
 
-bool Path::is_absolute(std::string const &path) { return path.size() && path[0] == separator; }
+bool Path::is_absolute(std::string const &path) {
+  return path.size() && path[0] == separator;
+}
 
-bool Path::trailing_slash(std::string const &path) { return path.size() && path[path.length() - 1] == separator; }
+bool Path::trailing_slash(std::string const &path) {
+  return path.size() && path[path.length() - 1] == separator;
+}
 
 std::string Path::join(std::string const &first, std::string const &second) {
   if (first.empty()) return second;
   if (second.empty()) return first;
+
   std::string result = first;
+  
   if (trailing_slash(result)) {
     result.pop_back();
   }
+
   if (is_absolute(second)) {
     result += second;
   } else {
     result += separator + second;
   }
+
   return result;
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (!str_startswith(path, root))
     return path;
+  
   path.erase(0, root.size());
   if (path.empty() || path[0] != separator) {
     path = separator + path;
   }
+  
   return path;
 }
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
+
 void SDFileServer::setup() { this->base_->add_handler(this); }
+
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
@@ -108,7 +131,6 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       this->handle_get(request);
       return;
     }
-
     if (request->method() == HTTP_DELETE) {
       this->handle_delete(request);
       return;
@@ -122,23 +144,24 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
   }
-
+  
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
+
   if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
     auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
     response->addHeader("Connection", "close");
     request->send(response);
     return;
   }
-
+  
   std::string file_name(filename.c_str());
   if (index == 0) {
     ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
     this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
     return;
   }
-
+  
   this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
   if (final) {
     auto response = request->beginResponse(201, "text/html", "upload success");
@@ -169,12 +192,122 @@ void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-
   response->print(F(R"(
-    SD Card Files
-    SD Card Files
-    Accéder à Web Server
-    Home > files > )"));
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SD Card Files</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #f5f5f7;
+      color: #1d1d1f;
+    }
+    h1 {
+      color: #0066cc;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 2rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    th {
+      background: #f8f9fa;
+      font-weight: 500;
+    }
+    .file-actions {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #0066cc;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #0052a3;
+    }
+    .upload-form {
+      margin-bottom: 2rem;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .upload-form input[type="file"] {
+      margin-right: 1rem;
+    }
+    .breadcrumb {
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    .breadcrumb a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    .breadcrumb a:hover {
+      text-decoration: underline;
+    }
+    .folder {
+      color: #0066cc;
+      font-weight: 500;
+    }
+    .file-type {
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .folder-icon {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .header-actions button {
+      background: #4CAF50;
+    }
+    .header-actions button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-actions">
+      <h1>SD Card Files</h1>
+      <button onclick="window.location.href='/'">Accéder à Web Server</button>
+    </div>
+    <div class="breadcrumb">
+      <a href="/">Home</a> > <a href="/files">files</a> > )"));
 
   // Breadcrumb navigation
   std::string current_path = "/files/";
@@ -190,135 +323,120 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       response->print(this->build_prefix().c_str());
       response->print(current_path.c_str());
       response->print("\">");
-      response->print("");
+      response->print("<svg class=\"folder-icon\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z\"/></svg>");
       response->print(part.c_str());
-      response->print(" > ");
-      response->print("");
+      response->print("</a> > ");
     }
     relative_path.erase(0, pos + 1);
   }
 
   response->print(F(R"(
+    </div>
+    )"));
 
-    Upload File
+  if (this->upload_enabled_) {
+    response->print(F(R"(
+    <div class="upload-form">
+      <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload File</button>
+      </form>
+    </div>
+    )"));
+  }
 
-    Name
-    Type
-    Size
-    Actions
-
+  response->print(F(R"(
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Size</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
   )"));
 
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries) {
     std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
     std::string file_name = Path::file_name(entry.path);
-    response->print("");
+    
+    response->print("<tr><td>");
     if (entry.is_directory) {
-      response->print("<a href=\"");
+      response->print("<a class=\"folder\" href=\"");
       response->print(uri.c_str());
       response->print("\">");
-      response->print("");
+      response->print("<svg class=\"folder-icon\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z\"/></svg>");
       response->print(file_name.c_str());
-      response->print("");
+      response->print("</a>");
     } else {
       response->print(file_name.c_str());
     }
-    response->print("");
+    response->print("</td><td>");
     if (entry.is_directory) {
       response->print("Folder");
     } else {
-      response->print("");
+      response->print("<span class=\"file-type\">");
       response->print(get_file_type(file_name).c_str());
-      response->print("");
+      response->print("</span>");
     }
-    response->print("");
+    response->print("</td><td>");
     if (!entry.is_directory) {
       response->print(format_size(entry.size).c_str());
     }
-    response->print("");
+    response->print("</td><td class=\"file-actions\">");
     if (!entry.is_directory) {
       if (this->download_enabled_) {
-        response->print("<a href=\"#\" onclick=\"downloadFile('");
+        response->print("<button onclick=\"download_file('");
         response->print(uri.c_str());
         response->print("','");
         response->print(file_name.c_str());
-        response->print("')\">Download");
+        response->print("')\">Download</button>");
       }
       if (this->deletion_enabled_) {
-        response->print("<a href=\"#\" onclick=\"deleteFile('");
+        response->print("<button onclick=\"delete_file('");
         response->print(uri.c_str());
-        response->print("')\">Delete");
+        response->print("')\">Delete</button>");
       }
     }
-    response->print("");
+    response->print("</td></tr>");
   }
 
   response->print(F(R"(
-
+      </tbody>
+    </table>
+    <script>
+      function delete_file(path) {
+        if (confirm('Are you sure you want to delete this file?')) {
+          fetch(path, {method: 'DELETE'})
+            .then(response => {
+              if (response.ok) location.reload();
+              else alert('Failed to delete file');
+            });
+        }
+      }
+      
+      function download_file(path, filename) {
+        fetch(path)
+          .then(response => response.blob())
+          .then(blob => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+          })
+          .catch(console.error);
+      }
+    </script>
+  </div>
+</body>
+</html>
   )"));
 
   request->send(response);
 }
-
-// Nouvelle classe qui sert de callback pour le téléchargement de fichiers en mode chunked
-class ChunkedFileResponse : public AsyncWebServerResponse {
- private:
-  sd_mmc_card::SdMmc *sd_mmc_card_;
-  std::string path_;
-  size_t file_size_;
-  size_t sent_;
-  // Assuming sd_mmc_card::SdMmc provides a method to open a file and returns a compatible file object
-  void* file_; // Changed to void*
-
- public:
-  ChunkedFileResponse(const std::string &content_type, sd_mmc_card::SdMmc *sd_mmc_card, const std::string &path,
-                      size_t content_length)
-      : AsyncWebServerResponse(), sd_mmc_card_(sd_mmc_card), path_(path), file_size_(content_length), sent_(0), file_(nullptr) {
-    _contentType = content_type.c_str();
-    _contentLength = content_length;
-    _sendContentLength = true;
-    _chunked = true;
-  }
-
-  ~ChunkedFileResponse() {
-    if (file_) {
-      sd_mmc_card_->close_file(file_); // Assuming sd_mmc_card has close_file method
-    }
-  }
-
-  const char *get_content_data() const override { return nullptr; }
-  size_t get_content_size() const override { return _contentLength; }
-
-  bool _sourceValid() const { return true; }
-  size_t _fillBuffer(uint8_t *buffer, size_t maxLen) override {
-    if (!file_) {
-      file_ = sd_mmc_card_->open_file(path_.c_str(), "r");
-      if (!file_) {
-        return 0;
-      }
-    }
-
-    size_t bytesToRead = (maxLen < CHUNK_SIZE) ? maxLen : CHUNK_SIZE;
-    bytesToRead = (bytesToRead < (file_size_ - sent_)) ? bytesToRead : (file_size_ - sent_);
-    if (bytesToRead == 0) {
-      return 0;
-    }
-
-    size_t read = sd_mmc_card_->read_file_data(file_, buffer, bytesToRead); // Assuming sd_mmc_card has read_file_data method
-    if (read > 0) {
-      sent_ += read;
-    }
-
-    // Fermer le fichier si nous avons fini
-    if (sent_ >= file_size_) {
-      sd_mmc_card_->close_file(file_); // Assuming sd_mmc_card has close_file method
-      file_ = nullptr;
-    }
-
-    return read;
-  }
-};
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
@@ -326,71 +444,110 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Vérifier si le fichier existe
-  size_t file_size = this->sd_mmc_card_->file_size(path);
+  // Get file size without loading the entire file
+  size_t file_size = this->sd_mmc_card_->get_file_size(path);
   if (file_size == 0) {
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
     return;
   }
 
-  // Déterminer le type de contenu basé sur l'extension du fichier
+  // Determine appropriate content type based on file extension
+  std::string content_type = "application/octet-stream";
   std::string file_name = Path::file_name(path);
-  std::string content_type = "application/octet-stream";  // Type de contenu par défaut
-
-  // Obtenir l'extension du fichier et définir le type de contenu approprié
   size_t dot_pos = file_name.rfind('.');
   if (dot_pos != std::string::npos) {
     std::string ext = file_name.substr(dot_pos + 1);
-    if (ext == "txt" || ext == "log" || ext == "csv") {
-      content_type = "text/plain";
-    } else if (ext == "html" || ext == "htm") {
-      content_type = "text/html";
-    } else if (ext == "css") {
-      content_type = "text/css";
-    } else if (ext == "js") {
-      content_type = "application/javascript";
-    } else if (ext == "json") {
-      content_type = "application/json";
-    } else if (ext == "xml") {
-      content_type = "application/xml";
-    } else if (ext == "png") {
-      content_type = "image/png";
-    } else if (ext == "jpg" || ext == "jpeg") {
-      content_type = "image/jpeg";
-    } else if (ext == "gif") {
-      content_type = "image/gif";
-    } else if (ext == "mp3") {
-      content_type = "audio/mpeg";
-    } else if (ext == "wav") {
-      content_type = "audio/wav";
+    static const std::map<std::string, std::string> mime_types = {
+      {"txt", "text/plain"},
+      {"html", "text/html"},
+      {"css", "text/css"},
+      {"js", "application/javascript"},
+      {"json", "application/json"},
+      {"xml", "application/xml"},
+      {"png", "image/png"},
+      {"jpg", "image/jpeg"},
+      {"jpeg", "image/jpeg"},
+      {"gif", "image/gif"},
+      {"pdf", "application/pdf"},
+      {"mp3", "audio/mpeg"},
+      {"wav", "audio/wav"},
+      {"mp4", "video/mp4"},
+      {"zip", "application/zip"},
+      {"csv", "text/csv"}
+    };
+    
+    auto it = mime_types.find(ext);
+    if (it != mime_types.end()) {
+      content_type = it->second;
     }
   }
 
-  // Si le fichier est plus petit que 64KB, utilisez la méthode d'origine
-  if (file_size < 65536) {
-    // Utiliser l'approche de lecture de fichier existante pour les petits fichiers
-    auto file = this->sd_mmc_card_->read_file(path);
-    if (file.size() == 0) {
-      request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
-      return;
-    }
-
+  // Use AsyncWebServerResponse_File in IDF or chunked transfer in Arduino
 #ifdef USE_ESP_IDF
-    auto *response = request->beginResponse_P(200, content_type.c_str(), file.data(), file.size());
-#else
-    auto *response = request->beginResponseStream(content_type.c_str(), file.size());
-    response->write(file.data(), file.size());
-#endif
-    request->send(response);
-    return;
-  }
-
-  // Pour les fichiers volumineux, utiliser le transfert chunked
-  ESP_LOGI(TAG, "Serving large file (%s) in chunked mode, size: %zu bytes", path.c_str(), file_size);
-  ChunkedFileResponse *response = new ChunkedFileResponse(content_type, this->sd_mmc_card_, path, file_size);
-  response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
-  response->addHeader("Accept-Ranges", "bytes");
+  // For ESP-IDF, we can use the built-in file serving capabilities
+  auto response = request->beginResponse(SDMMC, path.c_str(), content_type.c_str());
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
   request->send(response);
+#else
+  // For Arduino framework, implement chunked transfer
+  AsyncWebServerResponse *response = request->beginChunkedResponse(
+    content_type.c_str(),
+    [this, path, file_size](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+      // Static variables to maintain state between calls
+      static File file;
+      static size_t total_sent = 0;
+      
+      if (index == 0) {
+        // First call - open the file
+        file = this->sd_mmc_card_->open_file(path.c_str(), FILE_READ);
+        if (!file) {
+          ESP_LOGE(TAG, "Failed to open file %s", path.c_str());
+          return 0; // Signal end of stream
+        }
+        total_sent = 0;
+        ESP_LOGD(TAG, "Starting chunked download of %s (%zu bytes)", path.c_str(), file_size);
+      }
+      
+      if (!file || total_sent >= file_size) {
+        // End of file or error
+        if (file) {
+          file.close();
+          ESP_LOGD(TAG, "Completed chunked download, sent %zu bytes", total_sent);
+        }
+        return 0; // Signal end of stream
+      }
+      
+      // Read a chunk of the file
+      size_t chunk_size = min(maxLen, min(file_size - total_sent, static_cast<size_t>(16 * 1024))); // Max 16KB chunks
+      size_t read_size = file.read(buffer, chunk_size);
+      
+      if (read_size == 0) {
+        // Error or unexpected end of file
+        file.close();
+        ESP_LOGW(TAG, "Unexpected end of file at %zu bytes (expected %zu bytes)", total_sent, file_size);
+        return 0;
+      }
+      
+      total_sent += read_size;
+      ESP_LOGV(TAG, "Sent chunk: %zu bytes, total: %zu/%zu", read_size, total_sent, file_size);
+      
+      // If this was the last chunk, close the file
+      if (total_sent >= file_size) {
+        file.close();
+        ESP_LOGD(TAG, "Completed chunked download, sent %zu bytes", total_sent);
+      }
+      
+      return read_size;
+    }
+  );
+  
+  // Add necessary headers
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+  response->addHeader("Cache-Control", "no-cache");
+  
+  // Send the response
+  request->send(response);
+#endif
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
@@ -398,19 +555,16 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
     request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
   }
-
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
   if (this->sd_mmc_card_->is_directory(path)) {
     request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
     return;
   }
-
   if (this->sd_mmc_card_->delete_file(path)) {
     request->send(204, "application/json", "{}");
     return;
   }
-
   request->send(401, "application/json", "{ \"error\": \"failed to delete file\" }");
 }
 
@@ -439,10 +593,18 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
   // Remove leading slash from relative path if present
   if (Path::is_absolute(relative_path)) {
-    relative_path = relative_path.substr(1);
+    relative_path.erase(0, 1);
   }
 
-  return normalized_root + relative_path;
+  // Join paths and normalize
+  std::string absolute = Path::join(normalized_root, relative_path);
+  
+  // Ensure trailing slash for directories
+  if (this->sd_mmc_card_->is_directory(absolute) && !Path::trailing_slash(absolute)) {
+    absolute += Path::separator;
+  }
+
+  return absolute;
 }
 
 }  // namespace sd_file_server
