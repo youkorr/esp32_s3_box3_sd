@@ -444,19 +444,110 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  auto file = this->sd_mmc_card_->read_file(path);
-  if (file.size() == 0) {
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+  // Get file size without loading the entire file
+  size_t file_size = this->sd_mmc_card_->get_file_size(path);
+  if (file_size == 0) {
+    request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
     return;
   }
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
-#else
-  auto *response = request->beginResponseStream("application/octet", file.size());
-  response->write(file.data(), file.size());
-#endif
 
+  // Determine appropriate content type based on file extension
+  std::string content_type = "application/octet-stream";
+  std::string file_name = Path::file_name(path);
+  size_t dot_pos = file_name.rfind('.');
+  if (dot_pos != std::string::npos) {
+    std::string ext = file_name.substr(dot_pos + 1);
+    static const std::map<std::string, std::string> mime_types = {
+      {"txt", "text/plain"},
+      {"html", "text/html"},
+      {"css", "text/css"},
+      {"js", "application/javascript"},
+      {"json", "application/json"},
+      {"xml", "application/xml"},
+      {"png", "image/png"},
+      {"jpg", "image/jpeg"},
+      {"jpeg", "image/jpeg"},
+      {"gif", "image/gif"},
+      {"pdf", "application/pdf"},
+      {"mp3", "audio/mpeg"},
+      {"wav", "audio/wav"},
+      {"mp4", "video/mp4"},
+      {"zip", "application/zip"},
+      {"csv", "text/csv"}
+    };
+    
+    auto it = mime_types.find(ext);
+    if (it != mime_types.end()) {
+      content_type = it->second;
+    }
+  }
+
+  // Use AsyncWebServerResponse_File in IDF or chunked transfer in Arduino
+#ifdef USE_ESP_IDF
+  // For ESP-IDF, we can use the built-in file serving capabilities
+  auto response = request->beginResponse(SDMMC, path.c_str(), content_type.c_str());
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
   request->send(response);
+#else
+  // For Arduino framework, implement chunked transfer
+  AsyncWebServerResponse *response = request->beginChunkedResponse(
+    content_type.c_str(),
+    [this, path, file_size](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+      // Static variables to maintain state between calls
+      static File file;
+      static size_t total_sent = 0;
+      
+      if (index == 0) {
+        // First call - open the file
+        file = this->sd_mmc_card_->open_file(path.c_str(), FILE_READ);
+        if (!file) {
+          ESP_LOGE(TAG, "Failed to open file %s", path.c_str());
+          return 0; // Signal end of stream
+        }
+        total_sent = 0;
+        ESP_LOGD(TAG, "Starting chunked download of %s (%zu bytes)", path.c_str(), file_size);
+      }
+      
+      if (!file || total_sent >= file_size) {
+        // End of file or error
+        if (file) {
+          file.close();
+          ESP_LOGD(TAG, "Completed chunked download, sent %zu bytes", total_sent);
+        }
+        return 0; // Signal end of stream
+      }
+      
+      // Read a chunk of the file
+      size_t chunk_size = min(maxLen, min(file_size - total_sent, static_cast<size_t>(16 * 1024))); // Max 16KB chunks
+      size_t read_size = file.read(buffer, chunk_size);
+      
+      if (read_size == 0) {
+        // Error or unexpected end of file
+        file.close();
+        ESP_LOGW(TAG, "Unexpected end of file at %zu bytes (expected %zu bytes)", total_sent, file_size);
+        return 0;
+      }
+      
+      total_sent += read_size;
+      ESP_LOGV(TAG, "Sent chunk: %zu bytes, total: %zu/%zu", read_size, total_sent, file_size);
+      
+      // If this was the last chunk, close the file
+      if (total_sent >= file_size) {
+        file.close();
+        ESP_LOGD(TAG, "Completed chunked download, sent %zu bytes", total_sent);
+      }
+      
+      return read_size;
+    }
+  );
+  
+  // Add necessary headers
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+  response->addHeader("Cache-Control", "no-cache");
+  
+  // Send the response
+  request->send(response);
+#endif
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
