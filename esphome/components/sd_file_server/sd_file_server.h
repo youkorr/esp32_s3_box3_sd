@@ -7,6 +7,12 @@
 namespace esphome {
 namespace sd_file_server {
 
+#ifdef ESP32
+#include <SPIFFS.h>
+#include <SD_MMC.h>
+typedef fs::File File;
+#endif
+
 class SDFileServer : public Component, public AsyncWebHandler {
  public:
   SDFileServer(web_server_base::WebServerBase *base);
