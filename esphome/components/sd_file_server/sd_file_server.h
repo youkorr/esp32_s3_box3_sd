@@ -1,4 +1,5 @@
 #pragma once
+
 #include "esphome/core/component.h"
 #include "esphome/components/web_server_base/web_server_base.h"
 #include "../sd_mmc_card/sd_mmc_card.h"
@@ -8,9 +9,11 @@ namespace sd_file_server {
 
 class SDFileServer : public Component, public AsyncWebHandler {
  public:
-  SDFileServer(web_server_base::WebServerBase *);
+  SDFileServer(web_server_base::WebServerBase *base);
+
   void setup() override;
   void dump_config() override;
+
   bool canHandle(AsyncWebServerRequest *request) override;
   void handleRequest(AsyncWebServerRequest *request) override;
   void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
@@ -27,7 +30,6 @@ class SDFileServer : public Component, public AsyncWebHandler {
  protected:
   web_server_base::WebServerBase *base_;
   sd_mmc_card::SdMmc *sd_mmc_card_;
-
   std::string url_prefix_;
   std::string root_path_;
   bool deletion_enabled_;
@@ -58,7 +60,6 @@ struct Path {
 
   /* Join two path */
   static std::string join(std::string const &, std::string const &);
-
   static std::string remove_root_path(std::string path, std::string const &root);
 };
 
