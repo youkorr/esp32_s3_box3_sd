@@ -3,8 +3,6 @@
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/hal.h"
-#include <FS.h>
-#include <SPIFFS.h>
 
 namespace esphome {
 namespace sd_file_server {
@@ -270,13 +268,13 @@ class ChunkedFileResponse : public AsyncWebServerResponse {
   std::string path_;
   size_t file_size_;
   size_t sent_;
-  fs::File file_;
-  uint8_t buffer_[CHUNK_SIZE];
+  // Assuming sd_mmc_card::SdMmc provides a method to open a file and returns a compatible file object
+  void* file_; // Changed to void*
 
  public:
   ChunkedFileResponse(const std::string &content_type, sd_mmc_card::SdMmc *sd_mmc_card, const std::string &path,
                       size_t content_length)
-      : AsyncWebServerResponse(), sd_mmc_card_(sd_mmc_card), path_(path), file_size_(content_length), sent_(0) {
+      : AsyncWebServerResponse(), sd_mmc_card_(sd_mmc_card), path_(path), file_size_(content_length), sent_(0), file_(nullptr) {
     _contentType = content_type.c_str();
     _contentLength = content_length;
     _sendContentLength = true;
@@ -285,7 +283,7 @@ class ChunkedFileResponse : public AsyncWebServerResponse {
 
   ~ChunkedFileResponse() {
     if (file_) {
-      file_.close();
+      sd_mmc_card_->close_file(file_); // Assuming sd_mmc_card has close_file method
     }
   }
 
@@ -307,14 +305,15 @@ class ChunkedFileResponse : public AsyncWebServerResponse {
       return 0;
     }
 
-    size_t read = file_.read(buffer, bytesToRead);
+    size_t read = sd_mmc_card_->read_file_data(file_, buffer, bytesToRead); // Assuming sd_mmc_card has read_file_data method
     if (read > 0) {
       sent_ += read;
     }
 
     // Fermer le fichier si nous avons fini
     if (sent_ >= file_size_) {
-      file_.close();
+      sd_mmc_card_->close_file(file_); // Assuming sd_mmc_card has close_file method
+      file_ = nullptr;
     }
 
     return read;
