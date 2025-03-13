@@ -484,18 +484,18 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     }
   }
 
-  // **SENDFILE Approach with pre-read file content**
+  // Use the file reading approach
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
 
-  #ifdef USE_ESP_IDF
-    AsyncWebServerResponse *response = request->beginResponse_P(200, content_type.c_str(), (const char*)file.data(), file.size());
-  #else
-    AsyncWebServerResponse *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
-  #endif
+#ifdef USE_ESP_IDF
+  auto *response = request->beginResponse_P(200, content_type.c_str(), (const uint8_t*)file.data(), file.size());
+#else
+  auto *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
+#endif
 
   response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
   request->send(response);
@@ -527,7 +527,7 @@ std::string SDFileServer::extract_path_from_url(std::string const &url) const {
   return path;
 }
 
-std::string SDFileServer::build_absolute_path(std::string const &file_path) const {
+std::string SDFileServer::build_absolute_path(std::string file_path) const {
   std::string path = Path::join(this->root_path_, file_path);
 
   if (!Path::is_absolute(path)) {
@@ -539,6 +539,7 @@ std::string SDFileServer::build_absolute_path(std::string const &file_path) cons
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
