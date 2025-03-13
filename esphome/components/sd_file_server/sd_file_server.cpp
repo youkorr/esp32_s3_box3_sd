@@ -14,12 +14,12 @@ std::string format_size(size_t size) {
   const char* units[] = {"B", "KB", "MB", "GB"};
   size_t unit = 0;
   double s = static_cast<double>(size);
-  
+
   while (s >= 1024 && unit < 3) {
     s /= 1024;
     unit++;
   }
-  
+
   char buffer[32];
   snprintf(buffer, sizeof(buffer), "%.2f %s", s, units[unit]);
   return std::string(buffer);
@@ -81,7 +81,7 @@ std::string Path::join(std::string const &first, std::string const &second) {
   if (second.empty()) return first;
 
   std::string result = first;
-  
+
   if (trailing_slash(result)) {
     result.pop_back();
   }
@@ -98,12 +98,12 @@ std::string Path::join(std::string const &first, std::string const &second) {
 std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (!str_startswith(path, root))
     return path;
-  
+
   path.erase(0, root.size());
   if (path.empty() || path[0] != separator) {
     path = separator + path;
   }
-  
+
   return path;
 }
 
@@ -144,7 +144,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
   }
-  
+
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
 
@@ -154,14 +154,14 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     request->send(response);
     return;
   }
-  
+
   std::string file_name(filename.c_str());
   if (index == 0) {
     ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
     this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
     return;
   }
-  
+
   this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
   if (final) {
     auto response = request->beginResponse(201, "text/html", "upload success");
@@ -362,7 +362,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   for (auto const &entry : entries) {
     std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
     std::string file_name = Path::file_name(entry.path);
-    
+
     response->print("<tr><td>");
     if (entry.is_directory) {
       response->print("<a class=\"folder\" href=\"");
@@ -417,7 +417,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
             });
         }
       }
-      
+
       function download_file(path, filename) {
         fetch(path)
           .then(response => response.blob())
@@ -454,7 +454,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   // Determine content type based on file extension
   std::string file_name = Path::file_name(path);
   std::string content_type = "application/octet-stream";  // Default content type
-  
+
   // Get file extension and set appropriate content type
   size_t dot_pos = file_name.rfind('.');
   if (dot_pos != std::string::npos) {
@@ -484,29 +484,21 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     }
   }
 
-  // **CHUNKED TRANSFER ENCODING**
-  AsyncWebServerResponse *response = request->beginResponseStream(content_type.c_str(), file_size);
-  response->setContentLength(file_size);
-  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
-  request->send(response);
-
-  // Open the file for reading
+  // **SENDFILE Approach with pre-read file content**
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
 
-  const size_t chunkSize = 16 * 1024; // 16KB chunks
-  size_t total_sent = 0;
+  #ifdef USE_ESP_IDF
+    AsyncWebServerResponse *response = request->beginResponse_P(200, content_type.c_str(), (const char*)file.data(), file.size());
+  #else
+    AsyncWebServerResponse *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
+  #endif
 
-  while (total_sent < file_size) {
-    size_t chunk_size = std::min(chunkSize, file_size - total_sent);
-    response->write((const uint8_t*)file.data() + total_sent, chunk_size);
-    total_sent += chunk_size;
-  }
-
-  request->send(response, nullptr, 0); // Signal end of transmission
+  response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
+  request->send(response);
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
@@ -537,16 +529,17 @@ std::string SDFileServer::extract_path_from_url(std::string const &url) const {
 
 std::string SDFileServer::build_absolute_path(std::string const &file_path) const {
   std::string path = Path::join(this->root_path_, file_path);
-  
+
   if (!Path::is_absolute(path)) {
     path = Path::separator + path;
   }
-  
+
   return path;
 }
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
