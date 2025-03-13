@@ -484,21 +484,29 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     }
   }
 
-  // Use the file reading approach
+  // **CHUNKED TRANSFER ENCODING**
+  AsyncWebServerResponse *response = request->beginResponseStream(content_type.c_str(), file_size);
+  response->setContentLength(file_size);
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+  request->send(response);
+
+  // Open the file for reading
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
-  
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, content_type.c_str(), file.data(), file.size());
-#else
-  auto *response = request->beginResponseStream(content_type.c_str(), file.size());
-  response->write(file.data(), file.size());
-#endif
 
-  request->send(response);
+  const size_t chunkSize = 16 * 1024; // 16KB chunks
+  size_t total_sent = 0;
+
+  while (total_sent < file_size) {
+    size_t chunk_size = std::min(chunkSize, file_size - total_sent);
+    response->write((const uint8_t*)file.data() + total_sent, chunk_size);
+    total_sent += chunk_size;
+  }
+
+  request->send(response, nullptr, 0); // Signal end of transmission
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
@@ -509,57 +517,37 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
   if (this->sd_mmc_card_->is_directory(path)) {
-    request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
+    request->send(401, "application/json", "{ \"error\": \"can not delete directory\" }");
     return;
   }
   if (this->sd_mmc_card_->delete_file(path)) {
-    request->send(204, "application/json", "{}");
-    return;
+    request->send(200, "application/json", "{ \"message\": \"file deleted\" }");
+  } else {
+    request->send(401, "application/json", "{ \"error\": \"file deletion failed\" }");
   }
-  request->send(401, "application/json", "{ \"error\": \"failed to delete file\" }");
 }
 
-std::string SDFileServer::build_prefix() const {
-  if (this->url_prefix_.length() == 0 || this->url_prefix_.at(0) != '/')
-    return "/" + this->url_prefix_;
-  return this->url_prefix_;
-}
+std::string SDFileServer::build_prefix() const { return "/" + this->url_prefix_; }
 
 std::string SDFileServer::extract_path_from_url(std::string const &url) const {
   std::string prefix = this->build_prefix();
-  return url.substr(prefix.size(), url.size() - prefix.size());
+  std::string path = url.substr(prefix.length());
+  return path;
 }
 
-std::string SDFileServer::build_absolute_path(std::string relative_path) const {
-  // Normalize root path
-  std::string normalized_root = root_path_;
-  if (!Path::trailing_slash(normalized_root)) {
-    normalized_root += Path::separator;
-  }
-
-  // Handle empty relative path
-  if (relative_path.empty()) {
-    return normalized_root;
-  }
-
-  // Remove leading slash from relative path if present
-  if (Path::is_absolute(relative_path)) {
-    relative_path.erase(0, 1);
-  }
-
-  // Join paths and normalize
-  std::string absolute = Path::join(normalized_root, relative_path);
+std::string SDFileServer::build_absolute_path(std::string const &file_path) const {
+  std::string path = Path::join(this->root_path_, file_path);
   
-  // Ensure trailing slash for directories
-  if (this->sd_mmc_card_->is_directory(absolute) && !Path::trailing_slash(absolute)) {
-    absolute += Path::separator;
+  if (!Path::is_absolute(path)) {
+    path = Path::separator + path;
   }
-
-  return absolute;
+  
+  return path;
 }
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
