@@ -15,7 +15,7 @@ std::string format_size(size_t size) {
   size_t unit = 0;
   double s = static_cast<double>(size);
   
-  while (s >= 1024 && unit < 4) {
+  while (s >= 1024 && unit < 3) {
     s /= 1024;
     unit++;
   }
