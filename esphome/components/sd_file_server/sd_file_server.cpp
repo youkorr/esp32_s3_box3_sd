@@ -9,6 +9,9 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
+// Définir la taille du buffer pour le transfer chunked
+static const size_t CHUNK_SIZE = 4096;  // Taille optimale pour ESP32-S3
+
 // Helper function to format file sizes
 std::string format_size(size_t size) {
   const char* units[] = {"B", "KB", "MB", "GB"};
@@ -438,24 +441,80 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   request->send(response);
 }
 
+// Nouvelle classe qui sert de callback pour le téléchargement de fichiers en mode chunked
+class ChunkedFileResponse : public AsyncWebServerResponse {
+ private:
+  sd_mmc_card::SdMmc *sd_mmc_card_;
+  std::string path_;
+  size_t file_size_;
+  size_t sent_;
+  File file_;
+  uint8_t buffer_[CHUNK_SIZE];
+
+ public:
+  ChunkedFileResponse(const std::string &content_type, sd_mmc_card::SdMmc *sd_mmc_card, const std::string &path,
+                     size_t content_length) 
+      : AsyncWebServerResponse(content_type.c_str()), sd_mmc_card_(sd_mmc_card), path_(path), 
+        file_size_(content_length), sent_(0) {
+    _contentLength = content_length;
+    _sendContentLength = true;
+    _chunked = true;
+  }
+
+  ~ChunkedFileResponse() {
+    if (file_) {
+      file_.close();
+    }
+  }
+
+  bool _sourceValid() const { return true; }
+  virtual size_t _fillBuffer(uint8_t *buffer, size_t maxLen) override {
+    if (!file_) {
+      file_ = sd_mmc_card_->open_file(path_.c_str(), "r");
+      if (!file_) {
+        return 0;
+      }
+    }
+
+    size_t bytesToRead = (maxLen < CHUNK_SIZE) ? maxLen : CHUNK_SIZE;
+    bytesToRead = (bytesToRead < (file_size_ - sent_)) ? bytesToRead : (file_size_ - sent_);
+    
+    if (bytesToRead == 0) {
+      return 0;
+    }
+
+    size_t read = file_.read(buffer, bytesToRead);
+    if (read > 0) {
+      sent_ += read;
+    }
+    
+    // Fermer le fichier si nous avons fini
+    if (sent_ >= file_size_) {
+      file_.close();
+    }
+    
+    return read;
+  }
+};
+
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
 
-  // Get file size first - using file_size() instead of get_file_size()
+  // Vérifier si le fichier existe
   size_t file_size = this->sd_mmc_card_->file_size(path);
   if (file_size == 0) {
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
     return;
   }
 
-  // Determine content type based on file extension
+  // Déterminer le type de contenu basé sur l'extension du fichier
   std::string file_name = Path::file_name(path);
-  std::string content_type = "application/octet-stream";  // Default content type
+  std::string content_type = "application/octet-stream";  // Type de contenu par défaut
   
-  // Get file extension and set appropriate content type
+  // Obtenir l'extension du fichier et définir le type de contenu approprié
   size_t dot_pos = file_name.rfind('.');
   if (dot_pos != std::string::npos) {
     std::string ext = file_name.substr(dot_pos + 1);
@@ -484,20 +543,33 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     }
   }
 
-  // Use the file reading approach
-  auto file = this->sd_mmc_card_->read_file(path);
-  if (file.size() == 0) {
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+  // Si le fichier est plus petit que 64KB, utilisez la méthode d'origine
+  if (file_size < 65536) {
+    // Utiliser l'approche de lecture de fichier existante pour les petits fichiers
+    auto file = this->sd_mmc_card_->read_file(path);
+    if (file.size() == 0) {
+      request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+      return;
+    }
+    
+  #ifdef USE_ESP_IDF
+    auto *response = request->beginResponse_P(200, content_type.c_str(), file.data(), file.size());
+  #else
+    auto *response = request->beginResponseStream(content_type.c_str(), file.size());
+    response->write(file.data(), file.size());
+  #endif
+
+    request->send(response);
     return;
   }
-  
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, content_type.c_str(), file.data(), file.size());
-#else
-  auto *response = request->beginResponseStream(content_type.c_str(), file.size());
-  response->write(file.data(), file.size());
-#endif
 
+  // Pour les fichiers volumineux, utiliser le transfert chunked
+  ESP_LOGI(TAG, "Serving large file (%s) in chunked mode, size: %zu bytes", path.c_str(), file_size);
+  
+  ChunkedFileResponse *response = new ChunkedFileResponse(content_type, this->sd_mmc_card_, path, file_size);
+  response->addHeader("Content-Disposition", "attachment; filename=\"" + file_name + "\"");
+  response->addHeader("Accept-Ranges", "bytes");
+  
   request->send(response);
 }
 
