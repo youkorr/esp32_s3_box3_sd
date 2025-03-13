@@ -4,6 +4,7 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/hal.h"
 #include <FS.h>
+#include <SPIFFS.h>
 
 namespace esphome {
 namespace sd_file_server {
@@ -447,6 +448,7 @@ std::string SDFileServer::build_absolute_path(std::string relative_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
