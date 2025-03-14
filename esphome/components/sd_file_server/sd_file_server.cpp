@@ -146,7 +146,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
         // Check if request has a Content-Type header for multipart form data
         bool is_multipart = false;
         if (request->hasHeader("Content-Type")) {
-          std::string header_value = request->get_Header("Content-Type").c_str();
+          std::string header_value = request->get_header("Content-Type").c_str();
           if (str_startswith(header_value, "multipart/form-data")) {
             is_multipart = true;
           }
