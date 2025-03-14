@@ -99,13 +99,6 @@ SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {
 
 void SDFileServer::setup() {
   this->base_->add_handler(this);
-
-  // Register handleUpload for file uploads
-  if (this->upload_enabled_) {
-    this->base_->onUpload([this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
-      this->handleUpload(request, filename, index, data, len, final);
-    });
-  }
 }
 
 void SDFileServer::dump_config() {
@@ -134,53 +127,34 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
     }
     if (request->method() == HTTP_POST) {
       if (this->upload_enabled_) {
-        bool is_multipart = false;
-        if (request->hasHeader("Content-Type")) {
-          std::string header_value = request->get_header("Content-Type").value_or("").c_str();
-          if (str_startswith(header_value, "multipart/form-data")) {
-            is_multipart = true;
-          }
-        }
+        // Vérifier si la requête contient des données de téléversement
+        if (request->hasParam("file", true)) {
+          AsyncWebParameter* file = request->getParam("file", true);
+          if (file->isFile()) {
+            // Traiter le fichier téléversé
+            std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+            std::string path = this->build_absolute_path(extracted);
 
-        if (is_multipart) {
-          request->send(200, "text/plain", "File upload initiated");
-          return;
+            std::string file_name = file->value().c_str();
+            std::string file_path = Path::join(path, file_name);
+
+            // Écrire le fichier sur la carte SD
+            if (this->sd_mmc_card_->write_file(file_path.c_str(), (const uint8_t*)file->value().c_str(), file->size())) {
+              request->send(200, "text/plain", "File uploaded successfully");
+            } else {
+              request->send(500, "text/plain", "Failed to write file to SD card");
+            }
+            return;
+          }
         }
       }
 
+      // Si ce n'est pas un téléversement de fichier, traiter comme une requête POST normale
       request->send(200, "text/plain", "POST request processed");
       return;
     }
   }
   request->send(404);
-}
-
-void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
-  if (!this->upload_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
-    return;
-  }
-
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
-
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    request->send(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    return;
-  }
-
-  std::string file_name(filename.c_str());
-  if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
-    return;
-  }
-
-  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
-  if (final) {
-    request->send(201, "text/html", "upload success");
-    return;
-  }
 }
 
 void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
@@ -457,7 +431,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Get file size first - using file_size
+  // Get file size first
   size_t file_size = this->sd_mmc_card_->file_size(path);
   if (file_size == 0) {
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
@@ -478,7 +452,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       content_type = "text/html";
     } else if (ext == "css") {
       content_type = "text/css";
-    } else if (ext == "js") {
+       } else if (ext == "js") {
       content_type = "application/javascript";
     } else if (ext == "json") {
       content_type = "application/json";
