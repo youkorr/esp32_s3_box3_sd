@@ -130,7 +130,19 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       ESP_LOGD(TAG, "Handling POST request");
       if (request->hasParam("file")) {  // Corrected: Use hasParam(const std::string&)
         ESP_LOGD(TAG, "Handling file upload POST request");
-        this->handleUpload(request);  // Corrected: Call handleUpload (uppercase U)
+        auto params = request->getParams();
+        AsyncWebParameter* p = request->getParam("file", true);
+        if (p != nullptr) {
+          String filename = p->value();
+          size_t index = 0;
+          uint8_t *data = (uint8_t*) filename.c_str();
+          size_t len = filename.length();
+          bool final = true;
+           this->handleUpload(request, filename, index, data, len, final);  // Corrected: Call handleUpload (uppercase U)
+        } else {
+           ESP_LOGW(TAG, "file parameter is null");
+           request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
+        }
         return;
       } else {
         ESP_LOGW(TAG, "No file parameter found in POST request");
@@ -171,18 +183,16 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
       return;
     }
     ESP_LOGD(TAG, "Uploading file %s to %s", file_name_str.c_str(), full_path.c_str());
-    if (!this->sd_mmc_card_->write_file(full_path.c_str(), data, len)) {  // Corrected: Pass const char*
-      ESP_LOGE(TAG, "Failed to write file %s", full_path.c_str());
-      request->send(500, "application/json", "{ \"error\": \"failed to write file\" }");
-      return;
-    }
+     sd_mmc_card_->write_file(full_path.c_str(), data, len);
+    ESP_LOGE(TAG, "Failed to write file %s", full_path.c_str());
+    request->send(500, "application/json", "{ \"error\": \"failed to write file\" }");
+    return;
   } else {
     ESP_LOGD(TAG, "Appending %u bytes to file %s", len, full_path.c_str());
-    if (!this->sd_mmc_card_->append_file(full_path.c_str(), data, len)) {  // Corrected: Pass const char*
-      ESP_LOGE(TAG, "Failed to append file %s", full_path.c_str());
-      request->send(500, "application/json", "{ \"error\": \"failed to append file\" }");
-      return;
-    }
+     sd_mmc_card_->append_file(full_path.c_str(), data, len);
+    ESP_LOGE(TAG, "Failed to append file %s", full_path.c_str());
+    request->send(500, "application/json", "{ \"error\": \"failed to append file\" }");
+    return;
   }
 
   if (final) {
@@ -200,7 +210,7 @@ void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allo
 
 std::string SDFileServer::build_prefix() const { return this->url_prefix_; }
 
-std::string SDFileServer::build_absolute_path(std::string const &path) const {  // Added const&
+std::string SDFileServer::build_absolute_path(std::string path) const {  // Removed const&
   return Path::join(this->root_path_, path);
 }
 
@@ -567,6 +577,7 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
