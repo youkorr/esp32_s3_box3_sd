@@ -14,12 +14,10 @@ std::string format_size(size_t size) {
   const char* units[] = {"B", "KB", "MB", "GB"};
   size_t unit = 0;
   double s = static_cast<double>(size);
-
   while (s >= 1024 && unit < 3) {
     s /= 1024;
     unit++;
   }
-
   char buffer[32];
   snprintf(buffer, sizeof(buffer), "%.2f %s", s, units[unit]);
   return std::string(buffer);
@@ -35,7 +33,6 @@ std::string get_file_type(const std::string &filename) {
     {"json", "Data (JSON)"}, {"xml", "Data (XML)"}, {"zip", "Archive (ZIP)"},
     {"gz", "Archive (GZ)"}, {"tar", "Archive (TAR)"}
   };
-
   size_t dot_pos = filename.rfind('.');
   if (dot_pos != std::string::npos) {
     std::string ext = filename.substr(dot_pos + 1);
@@ -68,30 +65,25 @@ bool Path::trailing_slash(std::string const &path) {
 std::string Path::join(std::string const &first, std::string const &second) {
   if (first.empty()) return second;
   if (second.empty()) return first;
-
   std::string result = first;
   if (trailing_slash(result)) {
     result.pop_back();
   }
-
   if (is_absolute(second)) {
     result += second;
   } else {
     result += separator + second;
   }
-
   return result;
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (!str_startswith(path, root))
     return path;
-
   path.erase(0, root.size());
   if (path.empty() || path[0] != separator) {
     path = separator + path;
   }
-
   return path;
 }
 
@@ -127,19 +119,19 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
     }
     if (request->method() == HTTP_POST) {
       if (this->upload_enabled_) {
-        // Vérifier si la requête contient des données de téléversement
-        if (request->hasParam("file", true)) {
-          AsyncWebParameter* file = request->getParam("file", true);
-          if (file->isFile()) {
-            // Traiter le fichier téléversé
+        // Check if the request contains a file upload
+        int totalParams = request->params();
+        for (int i = 0; i < totalParams; i++) {
+          AsyncWebParameter* param = request->getParam(i);
+          if (param->name() == "file") {
+            // Extract file data from param->value()
             std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
             std::string path = this->build_absolute_path(extracted);
-
-            std::string file_name = file->value().c_str();
+            std::string file_name = param->value().c_str();
             std::string file_path = Path::join(path, file_name);
 
-            // Écrire le fichier sur la carte SD
-            if (this->sd_mmc_card_->write_file(file_path.c_str(), (const uint8_t*)file->value().c_str(), file->size())) {
+            // Write the file to the SD card
+            if (this->sd_mmc_card_->write_file(file_path.c_str(), (const uint8_t*)param->value().c_str(), param->value().length())) {
               request->send(200, "text/plain", "File uploaded successfully");
             } else {
               request->send(500, "text/plain", "Failed to write file to SD card");
@@ -148,8 +140,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
           }
         }
       }
-
-      // Si ce n'est pas un téléversement de fichier, traiter comme une requête POST normale
+      // If not a file upload, treat as a normal POST request
       request->send(200, "text/plain", "POST request processed");
       return;
     }
@@ -167,12 +158,10 @@ void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allo
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
-
   if (!this->sd_mmc_card_->is_directory(path)) {
     handle_download(request, path);
     return;
   }
-
   handle_index(request, path);
 }
 
@@ -294,7 +283,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     </div>
     <div class="breadcrumb">
       <a href="/">Home</a> > <a href="/files">files</a> > )"));
-
   // Breadcrumb navigation
   std::string current_path = "/files/";
   std::string relative_path = Path::remove_root_path(path, this->root_path_);
@@ -315,11 +303,9 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     }
     relative_path.erase(0, pos + 1);
   }
-
   response->print(F(R"(
     </div>
     )"));
-
   if (this->upload_enabled_) {
     response->print(F(R"(
     <div class="upload-form">
@@ -331,7 +317,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     </div>
     )"));
   }
-
   response->print(F(R"(
     <table>
       <thead>
@@ -344,12 +329,10 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       </thead>
       <tbody>
   )"));
-
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries) {
     std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
     std::string file_name = Path::file_name(entry.path);
-
     response->print("<tr><td>");
     if (entry.is_directory) {
       response->print("<a class=\"folder\" href=\"");
@@ -390,7 +373,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     }
     response->print("</td></tr>");
   }
-
   response->print(F(R"(
       </tbody>
     </table>
@@ -404,7 +386,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
             });
         }
       }
-
       function download_file(path, filename) {
         fetch(path)
           .then(response => response.blob())
@@ -421,7 +402,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 </body>
 </html>
   )"));
-
   request->send(response);
 }
 
@@ -430,18 +410,15 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
-
   // Get file size first
   size_t file_size = this->sd_mmc_card_->file_size(path);
   if (file_size == 0) {
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
     return;
   }
-
   // Determine content type based on file extension
   std::string file_name = Path::file_name(path);
   std::string content_type = "application/octet-stream";  // Default content type
-
   // Get file extension and set appropriate content type
   size_t dot_pos = file_name.rfind('.');
   if (dot_pos != std::string::npos) {
@@ -452,7 +429,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       content_type = "text/html";
     } else if (ext == "css") {
       content_type = "text/css";
-       } else if (ext == "js") {
+    } else if (ext == "js") {
       content_type = "application/javascript";
     } else if (ext == "json") {
       content_type = "application/json";
@@ -470,20 +447,17 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       content_type = "audio/wav";
     }
   }
-
   // Use the file reading approach
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
     return;
   }
-
 #ifdef USE_ESP_IDF
   auto *response = request->beginResponse_P(200, content_type.c_str(), (const uint8_t*)file.data(), file.size());
 #else
   auto *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
 #endif
-
   response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
   request->send(response);
 }
@@ -507,20 +481,16 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
 }
 
 std::string SDFileServer::build_prefix() const { return "/" + this->url_prefix_; }
-
 std::string SDFileServer::extract_path_from_url(std::string const &url) const {
   std::string prefix = this->build_prefix();
   std::string path = url.substr(prefix.length());
   return path;
 }
-
 std::string SDFileServer::build_absolute_path(std::string file_path) const {
   std::string path = Path::join(this->root_path_, file_path);
-
   if (!Path::is_absolute(path)) {
     path = Path::separator + path;
   }
-
   return path;
 }
 
