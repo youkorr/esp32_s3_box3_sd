@@ -38,9 +38,9 @@ class SDFileServer : public Component, public AsyncWebHandler {
   sd_mmc_card::SdMmc *sd_mmc_card_;
   std::string url_prefix_;
   std::string root_path_;
-  bool deletion_enabled_;
-  bool download_enabled_;
-  bool upload_enabled_;
+  bool deletion_enabled_ = false;
+  bool download_enabled_ = false;
+  bool upload_enabled_ = false;
 
   std::string build_prefix() const;
   std::string extract_path_from_url(std::string const &) const;
