@@ -141,24 +141,19 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_POST) {
-      // Check if this is a file upload by examining headers
-      // Since we can't use contentType() and onFileUpload(), we'll handle uploads differently
+      // Check if this is a file upload by examining Content-Type header
       if (this->upload_enabled_) {
-        // Check if any of the headers indicate this is a multipart form upload
+        // Check if request has a Content-Type header for multipart form data
         bool is_multipart = false;
-        for (size_t i = 0; i < request->headers(); i++) {
-          if (String(request->headerName(i).c_str()).equalsIgnoreCase("Content-Type")) {
-            std::string header_value = request->header(i).c_str();
-            if (str_startswith(header_value, "multipart/form-data")) {
-              is_multipart = true;
-              break;
-            }
+        if (request->hasHeader("Content-Type")) {
+          std::string header_value = request->getHeader("Content-Type").c_str();
+          if (str_startswith(header_value, "multipart/form-data")) {
+            is_multipart = true;
           }
         }
         
         if (is_multipart) {
-          // Since we can't use onFileUpload, we'll need to handle the file data directly
-          // This would typically involve parsing the multipart form data
+          // Since we can't use onFileUpload, we'll need to handle the file data differently
           // For now, we'll just acknowledge that we can't handle file uploads this way
           request->send(200, "text/plain", "File upload initiated - Use the ESPHome native file upload API instead");
           return;
