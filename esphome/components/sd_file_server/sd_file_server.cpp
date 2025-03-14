@@ -109,7 +109,15 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
+void SDFileServer::setup() {
+  this->base_->add_handler(this);
+  
+  // Ajouter le gestionnaire d'upload pour les fichiers
+  this->base_->add_upload_handler([this](AsyncWebServerRequest *request, const String& filename, 
+                                size_t index, uint8_t *data, size_t len, bool final) {
+    this->handleUpload(request, filename, index, data, len, final);
+  }, this->url_prefix_.c_str());
+}
 
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
@@ -123,6 +131,7 @@ void SDFileServer::dump_config() {
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
   return str_startswith(std::string(request->url().c_str()), this->build_prefix());
+  // Cette méthode accepte maintenant tous les types de requêtes (GET, POST, DELETE)
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
@@ -135,39 +144,66 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       this->handle_delete(request);
       return;
     }
+    if (request->method() == HTTP_POST) {
+      // Pour les requêtes POST normales (non-upload)
+      // Les uploads seront traités par le gestionnaire d'upload séparé
+      if (!request->hasParam("file", true)) {
+        // Si pas de fichier joint, retourner un message pour indiquer que la requête est reçue
+        request->send(200, "text/plain", "Upload en attente de fichier");
+      }
+      return;
+    }
   }
+  // Si la requête n'est pas gérée
+  request->send(404);
 }
 
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                                size_t len, bool final) {
+                              size_t len, bool final) {
   if (!this->upload_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
+    ESP_LOGE(TAG, "Upload rejeté : uploads désactivés");
+    request->send(403, "application/json", "{ \"error\": \"L'upload de fichiers est désactivé\" }");
     return;
   }
 
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
-
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
-
   std::string file_name(filename.c_str());
+
+  // Vérifier que le chemin de destination est un répertoire
   if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
-    return;
+    if (!this->sd_mmc_card_->is_directory(path)) {
+      ESP_LOGE(TAG, "Upload rejeté : %s n'est pas un répertoire", path.c_str());
+      request->send(400, "application/json", "{ \"error\": \"Répertoire de destination invalide\" }");
+      return;
+    }
+    
+    ESP_LOGI(TAG, "Début d'upload du fichier %s vers %s", file_name.c_str(), path.c_str());
+    
+    // Créer ou écraser le fichier (première partie)
+    if (!this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len)) {
+      ESP_LOGE(TAG, "Échec lors de la création du fichier %s", file_name.c_str());
+      request->send(500, "application/json", "{ \"error\": \"Échec lors de la création du fichier\" }");
+      return;
+    }
+  } else {
+    // Ajouter des données au fichier existant
+    if (!this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len)) {
+      ESP_LOGE(TAG, "Échec lors de l'ajout de données au fichier %s", file_name.c_str());
+      request->send(500, "application/json", "{ \"error\": \"Échec lors de l'ajout de données au fichier\" }");
+      return;
+    }
   }
 
-  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
+  // Si c'est la fin du fichier, envoyer une réponse de succès
   if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
+    ESP_LOGI(TAG, "Upload terminé avec succès : %s", file_name.c_str());
+    
+    // Rediriger vers la page actuelle après l'upload
+    auto response = request->beginResponse(303);
+    response->addHeader("Location", request->url());
     response->addHeader("Connection", "close");
     request->send(response);
-    return;
   }
 }
 
