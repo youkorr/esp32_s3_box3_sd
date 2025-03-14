@@ -120,10 +120,14 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
     if (request->method() == HTTP_POST) {
       if (this->upload_enabled_) {
         // Check if the request contains a file upload
-        int totalParams = request->params();
-        for (int i = 0; i < totalParams; i++) {
-          AsyncWebParameter* param = request->getParam(i);
-          if (param->name() == "file") {
+        bool file_found = false;
+        for (auto const &entry : request->params_) {  // Access the protected `params_` map
+          std::string param_name = entry.first;
+          AsyncWebParameter* param = entry.second;
+
+          if (param_name == "file") {
+            file_found = true;
+
             // Extract file data from param->value()
             std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
             std::string path = this->build_absolute_path(extracted);
@@ -131,13 +135,15 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
             std::string file_path = Path::join(path, file_name);
 
             // Write the file to the SD card
-            if (this->sd_mmc_card_->write_file(file_path.c_str(), (const uint8_t*)param->value().c_str(), param->value().length())) {
-              request->send(200, "text/plain", "File uploaded successfully");
-            } else {
-              request->send(500, "text/plain", "Failed to write file to SD card");
-            }
+            this->sd_mmc_card_->write_file(file_path.c_str(), (const uint8_t*)param->value().c_str(), param->value().length());
+            request->send(200, "text/plain", "File uploaded successfully");
             return;
           }
+        }
+
+        if (!file_found) {
+          request->send(400, "text/plain", "No file parameter found in the request");
+          return;
         }
       }
       // If not a file upload, treat as a normal POST request
