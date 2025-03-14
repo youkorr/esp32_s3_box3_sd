@@ -114,62 +114,66 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "Handling request for: %s", request->url().c_str());
-  if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
-    if (request->method() == HTTP_GET) {
-      ESP_LOGD(TAG, "Handling GET request");
-      this->handle_get(request);
-      return;
-    }
-    if (request->method() == HTTP_DELETE) {
-      ESP_LOGD(TAG, "Handling DELETE request");
-      this->handle_delete(request);
-      return;
-    }
-    if (request->method() == HTTP_POST) {
-      ESP_LOGD(TAG, "Handling POST request");
-
-      // Check for multipart/form-data content type
-      if (request->contentType().startsWith("multipart/form-data")) {
-        if (request->hasParam("file", true)) {
-            ESP_LOGD(TAG, "Handling file upload POST request");
-            AsyncWebParameter* p = request->getParam("file", true);
-            if (p != nullptr) {
-              String filename = p->name();
-              size_t index = 0;
-              String file_content = p->value(); //get file content
-
-              // Allocate memory for the file data
-              uint8_t *data = new uint8_t[file_content.length() + 1];
-
-              // Copy the file content to the allocated memory
-              strcpy((char*)data, file_content.c_str());
-
-              size_t len = file_content.length();
-              bool final = true;
-              this->handleUpload(request, filename, index, data, len, final);
-              delete[] data; // Free the allocated memory
-            } else {
-              ESP_LOGW(TAG, "file parameter is null");
-              request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
-            }
-            return;
-        } else {
-            ESP_LOGW(TAG, "No file parameter found in POST request");
-            request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
+    ESP_LOGD(TAG, "Handling request for: %s", request->url().c_str());
+    if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
+        if (request->method() == HTTP_GET) {
+            ESP_LOGD(TAG, "Handling GET request");
+            this->handle_get(request);
             return;
         }
-      } else {
-          ESP_LOGW(TAG, "Invalid content type. Expected multipart/form-data");
-          request->send(400, "application/json", "{ \"error\": \"Invalid content type. Expected multipart/form-data\" }");
-          return;
-      }
-    }
+        if (request->method() == HTTP_DELETE) {
+            ESP_LOGD(TAG, "Handling DELETE request");
+            this->handle_delete(request);
+            return;
+        }
+        if (request->method() == HTTP_POST) {
+            ESP_LOGD(TAG, "Handling POST request");
 
-    ESP_LOGW(TAG, "Unsupported method: %d", request->method());
-    request->send(405, "application/json", "{ \"error\": \"Method not allowed\" }");
-  }
+            // Check for multipart/form-data content type
+            if (request->contentType().startsWith("multipart/form-data")) {
+                ESP_LOGD(TAG, "Content type is multipart/form-data");
+                if (request->hasParam("file", true)) {
+                    ESP_LOGD(TAG, "Handling file upload POST request");
+                    AsyncWebParameter* p = request->getParam("file", true);
+                    if (p != nullptr) {
+                        ESP_LOGD(TAG, "File parameter found");
+                        String filename = p->name();
+                        size_t index = 0;
+                        String file_content = p->value();
+
+                        // Allocate memory for the file data
+                        uint8_t* data = new uint8_t[file_content.length() + 1];
+
+                        // Copy the file content to the allocated memory
+                        strcpy((char*)data, file_content.c_str());
+
+                        size_t len = file_content.length();
+                        bool final = true;
+                        this->handleUpload(request, filename, index, data, len, final);
+                        delete[] data; // Free the allocated memory
+                        return;
+                    } else {
+                        ESP_LOGW(TAG, "file parameter is null");
+                        request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
+                        return;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "No file parameter found in POST request");
+                    request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
+                    return;
+                }
+            } else {
+                ESP_LOGW(TAG, "Invalid content type. Expected multipart/form-data, got: %s", request->contentType().c_str());
+                request->send(400, "application/json", "{ \"error\": \"Invalid content type. Expected multipart/form-data\" }");
+                return;
+            }
+        }
+
+        ESP_LOGW(TAG, "Unsupported method: %d", request->method());
+        request->send(405, "application/json", "{ \"error\": \"Method not allowed\" }");
+    }
 }
+
 
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
                                 size_t len, bool final) {
@@ -236,261 +240,55 @@ void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string path = this->build_absolute_path(extracted);
 
   if (!this->sd_mmc_card_->is_directory(path)) {
-    ESP_LOGD(TAG, "Handling download for file: %s", path.c_str());
     handle_download(request, path);
     return;
   }
 
-  ESP_LOGD(TAG, "Handling index for directory: %s", path.c_str());
   handle_index(request, path);
 }
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->print(F(R"(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SD Card Files</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      margin: 0;
-      padding: 2rem;
-      background: #f5f5f7;
-      color: #1d1d1f;
-    }
-    h1 {
-      color: #0066cc;
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      padding: 2rem;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1.5rem;
-    }
-    th, td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid #e0e0e0;
-    }
-    th {
-      background: #f8f9fa;
-      font-weight: 500;
-    }
-    .file-actions {
-      display: flex;
-      gap: 8px;
-    }
-    button {
-      padding: 6px 12px;
-      border: none;
-      border-radius: 6px;
-      background: #0066cc;
-      color: white;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    button:hover {
-      background: #0052a3;
-    }
-    .upload-form {
-      margin-bottom: 2rem;
-      padding: 1rem;
-      background: #f8f9fa;
-      border-radius: 8px;
-    }
-    .upload-form input[type="file"] {
-      margin-right: 1rem;
-    }
-    .breadcrumb {
-      margin-bottom: 1.5rem;
-      font-size: 0.9rem;
-      color: #666;
-    }
-    .breadcrumb a {
-      color: #0066cc;
-      text-decoration: none;
-    }
-    .breadcrumb a:hover {
-      text-decoration: underline;
-    }
-    .folder {
-      color: #0066cc;
-      font-weight: 500;
-    }
-    .file-type {
-      color: #666;
-      font-size: 0.9rem;
-    }
-    .folder-icon {
-      width: 20px;
-      height: 20px;
-      margin-right: 8px;
-      vertical-align: middle;
-    }
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-    .header-actions button {
-      background: #4CAF50;
-    }
-    .header-actions button:hover {
-      background: #45a049;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header-actions">
-      <h1>SD Card Files</h1>
-      <button onclick="window.location.href='/'">Accéder à Web Server</button>
-    </div>
-    <div class="breadcrumb">
-      <a href="/">Home</a> > <a href="/files">files</a> > )"));
+    response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
+                      "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
+                      "<title>SD Card Files</title>"
+                      "<style>"
+                      "body { font-family: Arial, sans-serif; }"
+                      "table { border-collapse: collapse; width: 100%; }"
+                      "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }"
+                      "th { background-color: #f2f2f2; }"
+                      "</style>"
+                      "</head><body>"
+                      "<h1>SD Card Content</h1><h2>Folder "));
 
-  // Breadcrumb navigation
-  std::string current_path = "/files/";
-  std::string relative_path = Path::remove_root_path(path, this->root_path_);
-  std::vector<std::string> parts;
-  size_t pos = 0;
-  while ((pos = relative_path.find('/')) != std::string::npos) {
-    std::string part = relative_path.substr(0, pos);
-    if (!part.empty()) {
-      parts.push_back(part);
-      current_path += part + "/";
-      response->print("<a href=\"");
-      response->print(this->build_prefix().c_str());
-      response->print(current_path.c_str());
-      response->print("\">");
-      response->print("<svg class=\"folder-icon\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z\"/></svg>");
-      response->print(part.c_str());
-      response->print("</a> > ");
-    }
-    relative_path.erase(0, pos + 1);
-  }
+    response->print(path.c_str());
+    response->print(F("</h2>"));
+    if (this->upload_enabled_)
+        response->print(F("<form method=\"POST\" enctype=\"multipart/form-data\">"
+                          "<input type=\"file\" name=\"file\"><input type=\"submit\" value=\"upload\"></form>"));
+    response->print(F("<a href=\"/"));
+    response->print(this->url_prefix_.c_str());
+    response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
+    auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
+    for (auto const& entry : entries)
+        write_row(response, entry);
 
-  response->print(F(R"(
-    </div>
-    )"));
+    response->print(F("</tbody></table>"
+                      "<script>"
+                      "function delete_file(path) {fetch(path, {method: \"DELETE\"}).then(response => {if (response.ok) { window.location.reload(); } else { alert('Failed to delete file.'); }});}"
+                      "function download_file(path, filename) {"
+                      "fetch(path).then(response => response.blob())"
+                      ".then(blob => {"
+                      "const link = document.createElement('a');"
+                      "link.href = URL.createObjectURL(blob);"
+                      "link.download = filename;"
+                      "link.click();"
+                      "}).catch(console.error);"
+                      "} "
+                      "</script>"
+                      "</body></html>"));
 
-  if (this->upload_enabled_) {
-    response->print(F(R"(
-    <div class="upload-form">
-      <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="file" required>
-        <button type="submit">Upload File</button>
-      </form>
-    </div>
-    )"));
-  }
-
-  response->print(F(R"(
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Size</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-  )"));
-
-  auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
-  for (auto const &entry : entries) {
-    std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
-    std::string file_name = Path::file_name(entry.path);
-
-    response->print("<tr><td>");
-    if (entry.is_directory) {
-      response->print("<a class=\"folder\" href=\"");
-      response->print(uri.c_str());
-      response->print("\">");
-      response->print("<svg class=\"folder-icon\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z\"/></svg>");
-      response->print(file_name.c_str());
-      response->print("</a>");
-    } else {
-      response->print(file_name.c_str());
-    }
-    response->print("</td><td>");
-    if (entry.is_directory) {
-      response->print("Folder");
-    } else {
-      response->print("<span class=\"file-type\">");
-      response->print(get_file_type(file_name).c_str());
-      response->print("</span>");
-    }
-    response->print("</td><td>");
-    if (!entry.is_directory) {
-      response->print(format_size(entry.size).c_str());
-    }
-    response->print("</td><td class=\"file-actions\">");
-    if (!entry.is_directory) {
-      if (this->download_enabled_) {
-        response->print("<button onclick=\"download_file('");
-        response->print(uri.c_str());
-        response->print("','");
-        response->print(file_name.c_str());
-        response->print("')\">Download</button>");
-      }
-      if (this->deletion_enabled_) {
-        response->print("<button onclick=\"delete_file('");
-        response->print(uri.c_str());
-        response->print("')\">Delete</button>");
-      }
-    }
-    response->print("</td></tr>");
-  }
-
-  response->print(F(R"(
-      </tbody>
-    </table>
-    <script>
-      function delete_file(path) {
-        if (confirm('Are you sure you want to delete this file?')) {
-          fetch(path, {method: 'DELETE'})
-            .then(response => {
-              if (response.ok) location.reload();
-              else alert('Failed to delete file');
-            });
-        }
-      }
-
-      function download_file(path, filename) {
-        fetch(path)
-          .then(response => response.blob())
-          .then(blob => {
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            link.click();
-          })
-          .catch(console.error);
-      }
-    </script>
-  </div>
-</body>
-</html>
-  )"));
-
-  request->send(response);
+    request->send(response);
 }
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
@@ -504,7 +302,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   // Get file size first - using file_size() instead of get_file_size()
   size_t file_size = this->sd_mmc_card_->file_size(path);
   if (file_size == 0) {
-    ESP_LOGW(TAG, "File not found or empty: %s", path.c_str());
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
     return;
   }
@@ -544,47 +341,85 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
 
   // Use the file reading approach
   auto file = this->sd_mmc_card_->read_file(path);
-  if (file.empty()) {
-    ESP_LOGE(TAG, "Failed to read file: %s", path.c_str());
-    request->send(500, "application/json", "{ \"error\": \"failed to read file\" }");
-    return;
-  }
+   if (file.empty()) {
+        ESP_LOGE(TAG, "Failed to read file: %s", path.c_str());
+        request->send(500, "application/json", "{ \"error\": \"failed to read file\" }");
+        return;
+    }
 
 #ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, content_type.c_str(), (const uint8_t *)file.data(), file.size());
+  auto *response = request->beginResponse_P(200, content_type.c_str(), (const uint8_t*)file.data(), file.size());
 #else
-  auto *response = request->beginResponse(200, content_type.c_str(), (const char *)file.data(), file.size());
+  auto *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
 #endif
 
   response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
   request->send(response);
-  ESP_LOGI(TAG, "File %s served successfully with content type %s", path.c_str(), content_type.c_str());
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   if (!this->deletion_enabled_) {
-    ESP_LOGW(TAG, "File deletion is disabled");
     request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
   }
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
   if (this->sd_mmc_card_->is_directory(path)) {
-    ESP_LOGW(TAG, "Cannot delete directories: %s", path.c_str());
-    request->send(400, "application/json", "{ \"error\": \"Cannot delete directories\" }");
-    return;
+        request->send(400, "application/json", "{ \"error\": \"Cannot delete directories\" }");
+        return;
   }
-    if (this->sd_mmc_card_->remove_file(path.c_str())) {
-      ESP_LOGI(TAG, "File deleted successfully: %s", path.c_str());
-      request->send(200, "application/json", "{ \"message\": \"File deleted successfully\" }");
+
+  if (this->sd_mmc_card_->remove_file(path.c_str())) {
+        request->send(200, "application/json", "{ \"message\": \"File deleted successfully\" }");
     } else {
-      ESP_LOGE(TAG, "Failed to delete file: %s", path.c_str());
-      request->send(500, "application/json", "{ \"error\": \"Failed to delete file\" }");
+        request->send(500, "application/json", "{ \"error\": \"Failed to delete file\" }");
     }
 }
 
+void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const& entry) const {
+    std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(entry.path, this->root_path_));
+    std::string file_name = Path::file_name(entry.path);
+
+    response->print("<tr><td>");
+    response->print("<a href=\"");
+    response->print(uri.c_str());
+    response->print("\">");
+    response->print(file_name.c_str());
+    response->print("</a></td><td>");
+    if (!entry.is_directory) {
+        if (this->download_enabled_) {
+            response->print("<button onclick=\"download_file('");
+            response->print(uri.c_str());
+            response->print("','");
+            response->print(file_name.c_str());
+            response->print("')\">Download</button>");
+        }
+        if (this->deletion_enabled_) {
+            response->print("<button onclick=\"delete_file('");
+            response->print(uri.c_str());
+            response->print("')\">Delete</button>");
+        }
+    }
+    response->print("</td></tr>");
+}
+
+
+std::string SDFileServer::build_prefix() const { return this->url_prefix_; }
+
+std::string SDFileServer::build_absolute_path(std::string path) const {
+    return Path::join(this->root_path_, path);
+}
+
+std::string SDFileServer::extract_path_from_url(std::string const& url) const {
+    std::string prefix = this->build_prefix();
+    if (str_startswith(url, prefix)) {
+        return url.substr(prefix.length());
+    }
+    return url;
+}
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
