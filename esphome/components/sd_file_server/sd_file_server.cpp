@@ -9,7 +9,6 @@ namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
 
-// Helper function to format file sizes
 std::string format_size(size_t size) {
   const char* units[] = {"B", "KB", "MB", "GB"};
   size_t unit = 0;
@@ -23,7 +22,6 @@ std::string format_size(size_t size) {
   return std::string(buffer);
 }
 
-// Map file extensions to their types
 std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
     {"mp3", "Audio (MP3)"}, {"wav", "Audio (WAV)"}, {"png", "Image (PNG)"},
@@ -45,7 +43,6 @@ std::string get_file_type(const std::string &filename) {
   return "File";
 }
 
-// Implementation of Path methods
 std::string Path::file_name(std::string const &path) {
   size_t pos = path.rfind(Path::separator);
   if (pos != std::string::npos) {
@@ -92,7 +89,7 @@ SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {
 void SDFileServer::setup() {
   this->base_->add_handler(this);
 
-  // Add a custom upload handler
+  // Ajouter un gestionnaire personnalisé pour les uploads
   class UploadHandler : public AsyncWebHandler {
    public:
     UploadHandler(SDFileServer *server) : server_(server) {}
@@ -102,11 +99,11 @@ void SDFileServer::setup() {
     }
 
     void handleRequest(AsyncWebServerRequest *request) override {
-      if (!request->hasParam("file")) {
-        request->send(400, "text/plain", "Missing file parameter");
+      auto *file_param = request->getParam("file");
+      if (!file_param || !file_param->isPost()) {
+        request->send(400, "text/plain", "Missing or invalid file parameter");
         return;
       }
-      auto *file_param = request->getParam("file", true);
       std::string filename = file_param->value().c_str();
       server_->handleUpload(request, filename.c_str(), 0, nullptr, 0, false);
     }
@@ -171,17 +168,9 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
       return;
     }
     ESP_LOGI(TAG, "Début d'upload du fichier %s vers %s", file_name.c_str(), path.c_str());
-    if (!this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len)) {
-      ESP_LOGE(TAG, "Échec lors de la création du fichier %s", file_name.c_str());
-      request->send(500, "application/json", "{ \"error\": \"Échec lors de la création du fichier\" }");
-      return;
-    }
+    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
   } else {
-    if (!this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len)) {
-      ESP_LOGE(TAG, "Échec lors de l'ajout de données au fichier %s", file_name.c_str());
-      request->send(500, "application/json", "{ \"error\": \"Échec lors de l'ajout de données au fichier\" }");
-      return;
-    }
+    this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
   }
 
   if (final) {
