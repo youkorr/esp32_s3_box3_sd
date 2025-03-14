@@ -91,12 +91,31 @@ SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {
 
 void SDFileServer::setup() {
   this->base_->add_handler(this);
-  // Add upload handler for files
-  this->base_->add_handler([this](AsyncWebServerRequest *request) {
-    if (request->method() == HTTP_POST && request->hasParam("file", true)) {
-      this->handleUpload(request);
+
+  // Add a custom upload handler
+  class UploadHandler : public AsyncWebHandler {
+   public:
+    UploadHandler(SDFileServer *server) : server_(server) {}
+
+    bool canHandle(AsyncWebServerRequest *request) override {
+      return request->method() == HTTP_POST && request->hasParam("file");
     }
-  });
+
+    void handleRequest(AsyncWebServerRequest *request) override {
+      if (!request->hasParam("file")) {
+        request->send(400, "text/plain", "Missing file parameter");
+        return;
+      }
+      auto *file_param = request->getParam("file", true);
+      std::string filename = file_param->value().c_str();
+      server_->handleUpload(request, filename.c_str(), 0, nullptr, 0, false);
+    }
+
+   private:
+    SDFileServer *server_;
+  };
+
+  this->base_->add_handler(new UploadHandler(this));
 }
 
 void SDFileServer::dump_config() {
@@ -104,9 +123,9 @@ void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
   ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
   ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Deletation Enabled: %s", TRUEFALSE(this->deletion_enabled_));
-  ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
-  ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
+  ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", TRUEFALSE(this->deletion_enabled_));
+  ESP_LOGCONFIG(TAG, "  Download Enabled: %s", TRUEFALSE(this->download_enabled_));
+  ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", TRUEFALSE(this->upload_enabled_));
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
@@ -133,30 +152,44 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   request->send(404);
 }
 
-void SDFileServer::handleUpload(AsyncWebServerRequest *request) {
+void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
+                                size_t len, bool final) {
   if (!this->upload_enabled_) {
     ESP_LOGE(TAG, "Upload rejeté : uploads désactivés");
     request->send(403, "application/json", "{ \"error\": \"L'upload de fichiers est désactivé\" }");
     return;
   }
 
-  auto *file_param = request->getParam("file", true);
-  if (!file_param) {
-    ESP_LOGE(TAG, "Upload rejeté : paramètre 'file' manquant");
-    request->send(400, "application/json", "{ \"error\": \"Paramètre 'file' manquant\" }");
-    return;
-  }
-
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
-  std::string file_name = file_param->value().c_str();
+  std::string file_name(filename.c_str());
 
-  // Write file to SD card
-  this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), file_param->value().c_str(),
-                                 file_param->value().length());
+  if (index == 0) {
+    if (!this->sd_mmc_card_->is_directory(path)) {
+      ESP_LOGE(TAG, "Upload rejeté : %s n'est pas un répertoire", path.c_str());
+      request->send(400, "application/json", "{ \"error\": \"Répertoire de destination invalide\" }");
+      return;
+    }
+    ESP_LOGI(TAG, "Début d'upload du fichier %s vers %s", file_name.c_str(), path.c_str());
+    if (!this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len)) {
+      ESP_LOGE(TAG, "Échec lors de la création du fichier %s", file_name.c_str());
+      request->send(500, "application/json", "{ \"error\": \"Échec lors de la création du fichier\" }");
+      return;
+    }
+  } else {
+    if (!this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len)) {
+      ESP_LOGE(TAG, "Échec lors de l'ajout de données au fichier %s", file_name.c_str());
+      request->send(500, "application/json", "{ \"error\": \"Échec lors de l'ajout de données au fichier\" }");
+      return;
+    }
+  }
 
-  ESP_LOGI(TAG, "Upload terminé avec succès : %s", file_name.c_str());
-  request->send(200, "application/json", "{ \"message\": \"Upload réussi\" }");
+  if (final) {
+    ESP_LOGI(TAG, "Upload terminé avec succès : %s", file_name.c_str());
+    auto response = request->beginResponse(303, "text/plain", "Upload réussi");
+    response->addHeader("Location", request->url().c_str());
+    request->send(response);
+  }
 }
 
 void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
@@ -295,7 +328,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     <div class="breadcrumb">
       <a href="/">Home</a> > <a href="/files">files</a> > )"));
 
-  // Breadcrumb navigation
   std::string current_path = "/files/";
   std::string relative_path = Path::remove_root_path(path, this->root_path_);
   std::vector<std::string> parts;
