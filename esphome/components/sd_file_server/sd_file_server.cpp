@@ -141,16 +141,14 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_POST) {
-      // Check if this is a file upload by examining headers
-      // Since we can't use contentType() and onFileUpload(), we'll handle uploads differently
+      // Check if this is a file upload by examining the Content-Type header
       if (this->upload_enabled_) {
-        // Check if any of the headers indicate this is a multipart form upload
+        // Check if the Content-Type header indicates this is a multipart form upload
         bool is_multipart = false;
-        for (size_t i = 0; i < request->headers(); i++) {
-          if (String(request->headerName(i).c_str()).equalsIgnoreCase("Content-Type") && 
-              String(request->header(i).c_str()).startsWith("multipart/form-data")) {
+        if (request->hasHeader("Content-Type")) {
+          String contentType = request->getHeader("Content-Type");
+          if (contentType.startsWith("multipart/form-data")) {
             is_multipart = true;
-            break;
           }
         }
         
@@ -575,7 +573,6 @@ std::string SDFileServer::build_absolute_path(std::string file_path) const {
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
