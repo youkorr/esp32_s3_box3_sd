@@ -109,7 +109,15 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
+void SDFileServer::setup() {
+  this->base_->add_handler(this);
+  
+  // Add upload handler to process file uploads
+  this->base_->add_upload_handler([this](AsyncWebServerRequest *request, const String& filename, 
+                                 size_t index, uint8_t *data, size_t len, bool final) {
+    this->handleUpload(request, filename, index, data, len, final);
+  }, this->build_prefix().c_str());
+}
 
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
@@ -135,7 +143,15 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       this->handle_delete(request);
       return;
     }
+    if (request->method() == HTTP_POST) {
+      // POST requests without file data
+      // File uploads are handled by the upload handler
+      request->send(200, "text/plain", "Upload processing");
+      return;
+    }
   }
+  // If we get here, the request is not handled
+  request->send(404);
 }
 
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
