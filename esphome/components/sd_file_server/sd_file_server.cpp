@@ -28,23 +28,12 @@ std::string format_size(size_t size) {
 // Map file extensions to their types
 std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
-    {"mp3", "Audio (MP3)"},
-    {"wav", "Audio (WAV)"},
-    {"png", "Image (PNG)"},
-    {"jpg", "Image (JPG)"},
-    {"jpeg", "Image (JPEG)"},
-    {"bmp", "Image (BMP)"},
-    {"txt", "Text (TXT)"},
-    {"log", "Text (LOG)"},
-    {"csv", "Text (CSV)"},
-    {"html", "Web (HTML)"},
-    {"css", "Web (CSS)"},
-    {"js", "Web (JS)"},
-    {"json", "Data (JSON)"},
-    {"xml", "Data (XML)"},
-    {"zip", "Archive (ZIP)"},
-    {"gz", "Archive (GZ)"},
-    {"tar", "Archive (TAR)"}
+    {"mp3", "Audio (MP3)"}, {"wav", "Audio (WAV)"}, {"png", "Image (PNG)"},
+    {"jpg", "Image (JPG)"}, {"jpeg", "Image (JPEG)"}, {"bmp", "Image (BMP)"},
+    {"txt", "Text (TXT)"}, {"log", "Text (LOG)"}, {"csv", "Text (CSV)"},
+    {"html", "Web (HTML)"}, {"css", "Web (CSS)"}, {"js", "Web (JS)"},
+    {"json", "Data (JSON)"}, {"xml", "Data (XML)"}, {"zip", "Archive (ZIP)"},
+    {"gz", "Archive (GZ)"}, {"tar", "Archive (TAR)"}
   };
 
   size_t dot_pos = filename.rfind('.');
@@ -81,7 +70,6 @@ std::string Path::join(std::string const &first, std::string const &second) {
   if (second.empty()) return first;
 
   std::string result = first;
-
   if (trailing_slash(result)) {
     result.pop_back();
   }
@@ -111,9 +99,13 @@ SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {
 
 void SDFileServer::setup() {
   this->base_->add_handler(this);
-  
-  // Instead of using add_upload_handler, we'll handle file uploads differently
-  // since onFileUpload is not available
+
+  // Register handleUpload for file uploads
+  if (this->upload_enabled_) {
+    this->base_->onUpload([this](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+      this->handleUpload(request, filename, index, data, len, final);
+    });
+  }
 }
 
 void SDFileServer::dump_config() {
@@ -121,9 +113,9 @@ void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
   ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
   ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Deletation Enabled: %s", TRUEFALSE(this->deletion_enabled_));
-  ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
-  ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
+  ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", TRUEFALSE(this->deletion_enabled_));
+  ESP_LOGCONFIG(TAG, "  Download Enabled: %s", TRUEFALSE(this->download_enabled_));
+  ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", TRUEFALSE(this->upload_enabled_));
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
@@ -141,9 +133,7 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_POST) {
-      // Check if this is a file upload by examining Content-Type header
       if (this->upload_enabled_) {
-        // Check if request has a Content-Type header for multipart form data
         bool is_multipart = false;
         if (request->hasHeader("Content-Type")) {
           std::string header_value = request->get_header("Content-Type").value_or("").c_str();
@@ -151,27 +141,21 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
             is_multipart = true;
           }
         }
-        
+
         if (is_multipart) {
-          // Since we can't use onFileUpload, we'll need to handle the file data differently
-          // For now, we'll just acknowledge that we can't handle file uploads this way
-          request->send(200, "text/plain", "File upload initiated - Use the ESPHome native file upload API instead");
+          request->send(200, "text/plain", "File upload initiated");
           return;
         }
       }
-      
-      // Non-upload POST request
+
       request->send(200, "text/plain", "POST request processed");
       return;
     }
   }
-  // If we get here, the request is not handled
   request->send(404);
 }
 
-// Simplify the handler for now as we can't use onFileUpload directly
-void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                                size_t len, bool final) {
+void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
   if (!this->upload_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
@@ -181,9 +165,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
   std::string path = this->build_absolute_path(extracted);
 
   if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
+    request->send(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
     return;
   }
 
@@ -196,9 +178,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 
   this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
   if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
-    response->addHeader("Connection", "close");
-    request->send(response);
+    request->send(201, "text/html", "upload success");
     return;
   }
 }
@@ -477,7 +457,7 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  // Get file size first - using file_size() instead of get_file_size()
+  // Get file size first - using file_size
   size_t file_size = this->sd_mmc_card_->file_size(path);
   if (file_size == 0) {
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
