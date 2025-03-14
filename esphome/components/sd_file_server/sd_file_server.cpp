@@ -145,29 +145,62 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     return;
   }
 
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
+  // Check if this is a multipart form data request
+  if (request->contentType() == "multipart/form-data") {
+    // Handle multipart form data
+    if (index == 0) {
+      // First chunk - create new file
+      std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+      std::string path = this->build_absolute_path(extracted);
+      
+      if (!this->sd_mmc_card_->is_directory(path)) {
+        auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
+        response->addHeader("Connection", "close");
+        request->send(response);
+        return;
+      }
 
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
+      std::string file_name(filename.c_str());
+      this->upload_file_path_ = Path::join(path, file_name);
+      ESP_LOGD(TAG, "Starting upload to %s", this->upload_file_path_.c_str());
+    }
 
-  std::string file_name(filename.c_str());
-  if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
-    return;
-  }
+    // Write data chunk
+    this->sd_mmc_card_->append_file(this->upload_file_path_.c_str(), data, len);
 
-  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
-  if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
+    if (final) {
+      // Final chunk - complete upload
+      auto response = request->beginResponse(201, "text/html", "upload success");
+      response->addHeader("Connection", "close");
+      request->send(response);
+      this->upload_file_path_.clear();
+    }
+  } else {
+    // Handle regular file upload
+    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+    std::string path = this->build_absolute_path(extracted);
+
+    if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
+      auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
+      response->addHeader("Connection", "close");
+      request->send(response);
+      return;
+    }
+
+    std::string file_name(filename.c_str());
+    if (index == 0) {
+      ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
+      this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
+      return;
+    }
+
+    this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
+    if (final) {
+      auto response = request->beginResponse(201, "text/html", "upload success");
+      response->addHeader("Connection", "close");
+      request->send(response);
+      return;
+    }
   }
 }
 
@@ -439,65 +472,103 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
 }
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
+  if (request->contentType() == "multipart/form-data") {
+    this->handle_multipart_download(request, path);
+  } else {
+    // Original download handling code
+    if (!this->download_enabled_) {
+      request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
+      return;
+    }
+
+    size_t file_size = this->sd_mmc_card_->file_size(path);
+    if (file_size == 0) {
+      request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
+      return;
+    }
+
+    std::string file_name = Path::file_name(path);
+    std::string content_type = "application/octet-stream";
+
+    size_t dot_pos = file_name.rfind('.');
+    if (dot_pos != std::string::npos) {
+      std::string ext = file_name.substr(dot_pos + 1);
+      if (ext == "txt" || ext == "log" || ext == "csv") {
+        content_type = "text/plain";
+      } else if (ext == "html" || ext == "htm") {
+        content_type = "text/html";
+      } else if (ext == "css") {
+        content_type = "text/css";
+      } else if (ext == "js") {
+        content_type = "application/javascript";
+      } else if (ext == "json") {
+        content_type = "application/json";
+      } else if (ext == "xml") {
+        content_type = "application/xml";
+      } else if (ext == "png") {
+        content_type = "image/png";
+      } else if (ext == "jpg" || ext == "jpeg") {
+        content_type = "image/jpeg";
+      } else if (ext == "gif") {
+        content_type = "image/gif";
+      } else if (ext == "mp3") {
+        content_type = "audio/mpeg";
+      } else if (ext == "wav") {
+        content_type = "audio/wav";
+      }
+    }
+
+    auto file = this->sd_mmc_card_->read_file(path);
+    if (file.size() == 0) {
+      request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+      return;
+    }
+
+#ifdef USE_ESP_IDF
+    auto *response = request->beginResponse_P(200, content_type.c_str(), (const uint8_t*)file.data(), file.size());
+#else
+    auto *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
+#endif
+
+    response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
+    request->send(response);
+  }
+}
+
+void SDFileServer::handle_multipart_download(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
 
-  // Get file size first - using file_size() instead of get_file_size()
+  // Get file size
   size_t file_size = this->sd_mmc_card_->file_size(path);
   if (file_size == 0) {
     request->send(404, "application/json", "{ \"error\": \"file not found or empty\" }");
     return;
   }
 
-  // Determine content type based on file extension
-  std::string file_name = Path::file_name(path);
-  std::string content_type = "application/octet-stream";  // Default content type
+  // Create multipart response
+  AsyncResponseStream *response = request->beginResponseStream("multipart/form-data");
+  
+  // Add boundary
+  std::string boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+  response->addHeader("Content-Type", ("multipart/form-data; boundary=" + boundary).c_str());
+  
+  // Add file part
+  response->print(("--" + boundary + "\r\n").c_str());
+  response->print("Content-Disposition: form-data; name=\"file\"; filename=\"");
+  response->print(Path::file_name(path).c_str());
+  response->print("\"\r\n");
+  response->print("Content-Type: application/octet-stream\r\n\r\n");
 
-  // Get file extension and set appropriate content type
-  size_t dot_pos = file_name.rfind('.');
-  if (dot_pos != std::string::npos) {
-    std::string ext = file_name.substr(dot_pos + 1);
-    if (ext == "txt" || ext == "log" || ext == "csv") {
-      content_type = "text/plain";
-    } else if (ext == "html" || ext == "htm") {
-      content_type = "text/html";
-    } else if (ext == "css") {
-      content_type = "text/css";
-    } else if (ext == "js") {
-      content_type = "application/javascript";
-    } else if (ext == "json") {
-      content_type = "application/json";
-    } else if (ext == "xml") {
-      content_type = "application/xml";
-    } else if (ext == "png") {
-      content_type = "image/png";
-    } else if (ext == "jpg" || ext == "jpeg") {
-      content_type = "image/jpeg";
-    } else if (ext == "gif") {
-      content_type = "image/gif";
-    } else if (ext == "mp3") {
-      content_type = "audio/mpeg";
-    } else if (ext == "wav") {
-      content_type = "audio/wav";
-    }
-  }
+  // Add file content
+  auto file_data = this->sd_mmc_card_->read_file(path);
+  response->write(file_data.data(), file_data.size());
+  
+  // End boundary
+  response->print(("\r\n--" + boundary + "--\r\n").c_str());
 
-  // Use the file reading approach
-  auto file = this->sd_mmc_card_->read_file(path);
-  if (file.size() == 0) {
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
-    return;
-  }
-
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, content_type.c_str(), (const uint8_t*)file.data(), file.size());
-#else
-  auto *response = request->beginResponse(200, content_type.c_str(), (const char*)file.data(), file.size());
-#endif
-
-  response->addHeader("Content-Disposition", ("attachment; filename=\"" + file_name + "\"").c_str());
   request->send(response);
 }
 
