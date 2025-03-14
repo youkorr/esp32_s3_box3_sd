@@ -112,11 +112,8 @@ SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {
 void SDFileServer::setup() {
   this->base_->add_handler(this);
   
-  // Add upload handler to process file uploads
-  this->base_->add_upload_handler([this](AsyncWebServerRequest *request, const String& filename, 
-                                 size_t index, uint8_t *data, size_t len, bool final) {
-    this->handleUpload(request, filename, index, data, len, final);
-  }, this->build_prefix().c_str());
+  // Instead of using add_upload_handler, we'll handle file uploads in handleRequest
+  // by checking for multipart form data in POST requests
 }
 
 void SDFileServer::dump_config() {
@@ -144,9 +141,17 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_POST) {
-      // POST requests without file data
-      // File uploads are handled by the upload handler
-      request->send(200, "text/plain", "Upload processing");
+      // Check if this is a file upload
+      if (this->upload_enabled_ && request->contentType().startsWith("multipart/form-data")) {
+        request->onFileUpload([this](AsyncWebServerRequest *request, const String& filename, 
+                                   size_t index, uint8_t *data, size_t len, bool final) {
+          this->handleUpload(request, filename, index, data, len, final);
+        });
+        return;
+      }
+      
+      // Non-upload POST request
+      request->send(200, "text/plain", "POST request processed");
       return;
     }
   }
