@@ -64,7 +64,7 @@ struct Path {
   /* Does the path have a trailing slash? */
   static bool trailing_slash(std::string const &);
 
-  /* Join two path */
+  /* Join two paths */
   static std::string join(std::string const &, std::string const &);
   static std::string remove_root_path(std::string path, std::string const &root);
 };
