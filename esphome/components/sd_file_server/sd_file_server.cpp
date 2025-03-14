@@ -128,26 +128,41 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
     }
     if (request->method() == HTTP_POST) {
       ESP_LOGD(TAG, "Handling POST request");
-      if (request->hasParam("file")) {  // Corrected: Use hasParam(const std::string&)
-        ESP_LOGD(TAG, "Handling file upload POST request");
-        AsyncWebParameter *p = request->getParam("file");
 
-          if (p != nullptr) {
-            String filename = p->filename();
-            size_t index = 0;
-            uint8_t *data = p->value().begin();
-            size_t len = p->value().length();
-            bool final = true;
-           this->handleUpload(request, filename, index, data, len, final);
-          } else {
-            ESP_LOGW(TAG, "file parameter is null");
+      // Check for multipart/form-data content type
+      if (request->contentType().startsWith("multipart/form-data")) {
+        if (request->hasParam("file", true)) {
+            ESP_LOGD(TAG, "Handling file upload POST request");
+            AsyncWebParameter* p = request->getParam("file", true);
+            if (p != nullptr) {
+              String filename = p->name();
+              size_t index = 0;
+              String file_content = p->value(); //get file content
+
+              // Allocate memory for the file data
+              uint8_t *data = new uint8_t[file_content.length() + 1];
+
+              // Copy the file content to the allocated memory
+              strcpy((char*)data, file_content.c_str());
+
+              size_t len = file_content.length();
+              bool final = true;
+              this->handleUpload(request, filename, index, data, len, final);
+              delete[] data; // Free the allocated memory
+            } else {
+              ESP_LOGW(TAG, "file parameter is null");
+              request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
+            }
+            return;
+        } else {
+            ESP_LOGW(TAG, "No file parameter found in POST request");
             request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
-          }
-        return;
+            return;
+        }
       } else {
-        ESP_LOGW(TAG, "No file parameter found in POST request");
-        request->send(400, "application/json", "{ \"error\": \"No file uploaded\" }");
-        return;
+          ESP_LOGW(TAG, "Invalid content type. Expected multipart/form-data");
+          request->send(400, "application/json", "{ \"error\": \"Invalid content type. Expected multipart/form-data\" }");
+          return;
       }
     }
 
@@ -164,12 +179,6 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     return;
   }
 
-  // if (request->contentType() != "multipart/form-data") {
-  //   ESP_LOGW(TAG, "Invalid content type: %s", request->contentType().c_str());
-  //   request->send(400, "application/json", "{ \"error\": \"Invalid content type, expected multipart/form-data\" }");
-  //   return;
-  // }
-
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
 
@@ -183,13 +192,13 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
       return;
     }
     ESP_LOGD(TAG, "Uploading file %s to %s", file_name_str.c_str(), full_path.c_str());
-    sd_mmc_card_->write_file(full_path.c_str(), data, len);
+    this->sd_mmc_card_->write_file(full_path.c_str(), data, len);
     ESP_LOGE(TAG, "Failed to write file %s", full_path.c_str());
     request->send(500, "application/json", "{ \"error\": \"failed to write file\" }");
     return;
   } else {
     ESP_LOGD(TAG, "Appending %u bytes to file %s", len, full_path.c_str());
-    sd_mmc_card_->append_file(full_path.c_str(), data, len);
+    this->sd_mmc_card_->append_file(full_path.c_str(), data, len);
     ESP_LOGE(TAG, "Failed to append file %s", full_path.c_str());
     request->send(500, "application/json", "{ \"error\": \"failed to append file\" }");
     return;
@@ -565,18 +574,18 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
     request->send(400, "application/json", "{ \"error\": \"Cannot delete directories\" }");
     return;
   }
-
-  if (this->sd_mmc_card_->remove_file(path.c_str())) {  // Corrected: Pass const char*
-    ESP_LOGI(TAG, "File deleted successfully: %s", path.c_str());
-    request->send(200, "application/json", "{ \"message\": \"File deleted successfully\" }");
-  } else {
-    ESP_LOGE(TAG, "Failed to delete file: %s", path.c_str());
-    request->send(500, "application/json", "{ \"error\": \"Failed to delete file\" }");
-  }
+    if (this->sd_mmc_card_->remove_file(path.c_str())) {
+      ESP_LOGI(TAG, "File deleted successfully: %s", path.c_str());
+      request->send(200, "application/json", "{ \"message\": \"File deleted successfully\" }");
+    } else {
+      ESP_LOGE(TAG, "Failed to delete file: %s", path.c_str());
+      request->send(500, "application/json", "{ \"error\": \"Failed to delete file\" }");
+    }
 }
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
