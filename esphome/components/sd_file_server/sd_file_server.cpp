@@ -141,14 +141,18 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
       return;
     }
     if (request->method() == HTTP_POST) {
-      // Check if this is a file upload by examining the Content-Type header
+      // Check if this is a file upload by examining headers
+      // Since we can't use contentType() and onFileUpload(), we'll handle uploads differently
       if (this->upload_enabled_) {
-        // Check if the Content-Type header indicates this is a multipart form upload
+        // Check if any of the headers indicate this is a multipart form upload
         bool is_multipart = false;
-        if (request->hasHeader("Content-Type")) {
-          String contentType = request->getHeader("Content-Type");
-          if (contentType.startsWith("multipart/form-data")) {
-            is_multipart = true;
+        for (size_t i = 0; i < request->headers(); i++) {
+          if (String(request->headerName(i).c_str()).equalsIgnoreCase("Content-Type")) {
+            std::string header_value = request->header(i).c_str();
+            if (str_startswith(header_value, "multipart/form-data")) {
+              is_multipart = true;
+              break;
+            }
           }
         }
         
