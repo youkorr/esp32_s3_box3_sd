@@ -307,7 +307,7 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
       <button onclick="window.location.href='/'">Accéder à Web Server</button>
     </div>
     <div class="breadcrumb">
-      <a href="/">Home</a> > <a href="/files">files</a> > )"));
+      <a href="/files">files</a> > )")); 
 
   // Breadcrumb navigation
   std::string current_path = "/files/";
