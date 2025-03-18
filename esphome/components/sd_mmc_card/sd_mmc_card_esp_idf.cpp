@@ -10,7 +10,7 @@
 #include "driver/sdmmc_host.h"
 #include "driver/sdmmc_types.h"
 
-int constexpr SD_OCR_SDHC_CAP = (1 << 30);  // value defined in esp-idf/components/sdmmc/include/sd_protocol_defs.h
+int constexpr SD_OCR_SDHC_CAP = (1 << 30);
 
 namespace esphome {
 namespace sd_mmc_card {
@@ -49,9 +49,6 @@ void SdMmc::setup() {
     slot_config.d3 = static_cast<gpio_num_t>(this->data3_pin_);
   }
 #endif
-  // Enable internal pullups on enabled pins. The internal pullups
-  // are insufficient however, please make sure 10k external pullups are
-  // connected on the bus. This is for debug / example purpose only.
   slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
   auto ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT.c_str(), &host, &slot_config, &mount_config, &this->card_);
@@ -72,70 +69,52 @@ void SdMmc::setup() {
   update_sensors();
 }
 
-void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode) {
-  std::string absolut_path = build_path(path);
-  FILE *file = nullptr;
-  file = fopen(absolut_path.c_str(), mode);
-  if (file == NULL) {
-    ESP_LOGE(TAG, "Failed to open file for writing");
-    return;
+bool SdMmc::write_file(const char *path, std::function<size_t(uint8_t*, size_t)> data_provider, size_t chunk_size) {
+  std::string absolute_path = build_path(path);
+  FILE *file = fopen(absolute_path.c_str(), "wb");
+  if (file == nullptr) {
+    ESP_LOGE(TAG, "Failed to open file for writing: %s", path);
+    return false;
   }
 
-  bool ok = fwrite(buffer, 1, len, file);
-  if (!ok) {
-    ESP_LOGE(TAG, "Failed to write to file");
+  std::vector<uint8_t> buffer(chunk_size);
+  size_t bytes_written;
+  while (true) {
+    size_t bytes_to_write = data_provider(buffer.data(), chunk_size);
+    if (bytes_to_write == 0) {
+      break;
+    }
+
+    bytes_written = fwrite(buffer.data(), 1, bytes_to_write, file);
+    if (bytes_written != bytes_to_write) {
+      ESP_LOGE(TAG, "Failed to write to file: %s", path);
+      fclose(file);
+      return false;
+    }
   }
 
   fclose(file);
-  this->update_sensors();
+  return true;
 }
 
-
-void SdMmc::write_file_chunked(const char *path, std::function<size_t(uint8_t*, size_t)> data_provider, size_t chunk_size) {
+bool SdMmc::read_file(const char *path, std::function<bool(const uint8_t*, size_t)> data_consumer, size_t chunk_size) {
   std::string absolute_path = build_path(path);
-  FILE *file = fopen(absolute_path.c_str(), "a");
-  if (file == NULL) {
-    ESP_LOGE(TAG, "Failed to open file for chunked writing");
-    return;
+  FILE *file = fopen(absolute_path.c_str(), "rb");
+  if (file == nullptr) {
+    ESP_LOGE(TAG, "Failed to open file for reading: %s", path);
+    return false;
   }
 
   std::vector<uint8_t> buffer(chunk_size);
   size_t bytes_read;
-  while ((bytes_read = data_provider(buffer.data(), chunk_size)) > 0) {
-    if (fwrite(buffer.data(), 1, bytes_read, file) != bytes_read) {
-      ESP_LOGE(TAG, "Failed to write chunk to file");
+  while ((bytes_read = fread(buffer.data(), 1, chunk_size, file)) > 0) {
+    if (!data_consumer(buffer.data(), bytes_read)) {
       break;
     }
   }
 
   fclose(file);
-  this->update_sensors();
-}
-
-std::vector<uint8_t> SdMmc::read_file_chunked(char const *path, size_t offset, size_t chunk_size) {
-  std::string absolut_path = build_path(path);
-  FILE *file = nullptr;
-  file = fopen(absolut_path.c_str(), "rb");
-  if (file == nullptr) {
-    ESP_LOGE(TAG, "Failed to open file for chunked reading");
-    return std::vector<uint8_t>();
-  }
-
-  if (fseek(file, offset, SEEK_SET) != 0) {
-    ESP_LOGE(TAG, "Failed to seek to position");
-    fclose(file); // Close the file before returning
-    return std::vector<uint8_t>();
-  }
-
-  std::vector<uint8_t> res;
-  res.resize(chunk_size);
-  size_t read = fread(res.data(), 1, chunk_size, file);
-  if (read < chunk_size) {
-    res.resize(read);
-  }
-
-  fclose(file);
-  return res;
+  return true;
 }
 
 bool SdMmc::create_directory(const char *path) {
@@ -184,33 +163,6 @@ bool SdMmc::delete_file(const char *path) {
   return true;
 }
 
-std::vector<uint8_t> SdMmc::read_file(char const *path) {
-  ESP_LOGV(TAG, "Read File: %s", path);
-  std::string absolut_path = build_path(path);
-  FILE *file = nullptr;
-  file = fopen(absolut_path.c_str(), "rb");
-  if (file == nullptr) {
-    ESP_LOGE(TAG, "Failed to open file for reading");
-    return std::vector<uint8_t>();
-  }
-
-  std::vector<uint8_t> res;
-  size_t fileSize = this->file_size(path);
-  if (fileSize == -1) {
-        fclose(file);
-        return res;
-  }
-  res.resize(fileSize);
-  size_t len = fread(res.data(), 1, fileSize, file);
-  fclose(file);
-  if (len < fileSize) {
-    ESP_LOGE(TAG, "Failed to read file: %s", strerror(errno));
-    return std::vector<uint8_t>();
-  }
-
-  return res;
-}
-
 std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth,
                                                                   std::vector<FileInfo> &list) {
   ESP_LOGV(TAG, "Listing directory file info: %s\n", path);
@@ -237,7 +189,7 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
     strlcpy(entry_absolut_path + dirpath_len, entry_path, sizeof(entry_absolut_path) - dirpath_len);
     if (entry->d_type != DT_DIR) {
       struct stat info;
-      if (stat(entry_absolut_path, &info) < 0) {
+      if (stat(entry_absolut_path.c_str(), &info) < 0) {
         ESP_LOGE(TAG, "Failed to stat file: %s '%s' %s", strerror(errno), entry->d_name, entry_absolut_path);
       } else {
         file_size = info.st_size;
@@ -246,7 +198,7 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
     list.emplace_back(entry_path, file_size, entry->d_type == DT_DIR);
 
     if (entry->d_type == DT_DIR && depth) {
-      list_directory_file_info_rec(entry_path, depth - 1, list);
+      list_directory_file_info_rec(entry_absolut_path, depth - 1, list);
     }
   }
   closedir(dir);
@@ -258,7 +210,7 @@ bool SdMmc::is_directory(const char *path) {
   DIR *dir = opendir(absolut_path.c_str());
   if (dir) {
     closedir(dir);
-    return true;
+    return dir != nullptr;
   }
   return false;
 }
@@ -297,8 +249,8 @@ void SdMmc::update_sensors() {
   if (!res) {
     tot_sect = (fs->n_fatent - 2) * fs->csize;
     fre_sect = fre_clust * fs->csize;
-    total_bytes = static_cast<uint64_t>(tot_sect) * FF_SS_SDCARD;
-    free_bytes = static_cast<uint64_t>(fre_sect) * FF_SS_SDCARD;
+    total_bytes = static_cast(tot_sect) * FF_SS_SDCARD;
+    free_bytes = static_cast(fre_sect) * FF_SS_SDCARD;
     used_bytes = total_bytes - free_bytes;
 
     if (this->used_space_sensor_ != nullptr)
@@ -319,4 +271,5 @@ void SdMmc::update_sensors() {
 }  // namespace esphome
 
 #endif  // USE_ESP_IDF
+
 
