@@ -69,52 +69,72 @@ void SdMmc::setup() {
   update_sensors();
 }
 
-bool SdMmc::write_file(const char *path, std::function<size_t(uint8_t*, size_t)> data_provider, size_t chunk_size) {
-  std::string absolute_path = build_path(path);
-  FILE *file = fopen(absolute_path.c_str(), "wb");
+void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode) {
+  std::string absolut_path = build_path(path);
+  FILE *file = nullptr;
+  file = fopen(absolut_path.c_str(), mode);
   if (file == nullptr) {
-    ESP_LOGE(TAG, "Failed to open file for writing: %s", path);
-    return false;
+    ESP_LOGE(TAG, "Failed to open file for writing");
+    return;
   }
 
-  std::vector<uint8_t> buffer(chunk_size);
-  size_t bytes_written;
-  while (true) {
-    size_t bytes_to_write = data_provider(buffer.data(), chunk_size);
-    if (bytes_to_write == 0) {
-      break;
-    }
-
-    bytes_written = fwrite(buffer.data(), 1, bytes_to_write, file);
-    if (bytes_written != bytes_to_write) {
-      ESP_LOGE(TAG, "Failed to write to file: %s", path);
-      fclose(file);
-      return false;
-    }
+  bool ok = fwrite(buffer, 1, len, file);
+  if (!ok) {
+    ESP_LOGE(TAG, "Failed to write to file");
   }
 
   fclose(file);
-  return true;
+  this->update_sensors();
 }
 
-bool SdMmc::read_file(const char *path, std::function<bool(const uint8_t*, size_t)> data_consumer, size_t chunk_size) {
-  std::string absolute_path = build_path(path);
-  FILE *file = fopen(absolute_path.c_str(), "rb");
+void SdMmc::write_file_chunked(const char *path, const uint8_t *buffer, size_t len, size_t chunk_size) {
+  std::string absolut_path = build_path(path);
+  FILE *file = nullptr;
+  file = fopen(absolut_path.c_str(), "a");
   if (file == nullptr) {
-    ESP_LOGE(TAG, "Failed to open file for reading: %s", path);
-    return false;
+    ESP_LOGE(TAG, "Failed to open file for chunked writing");
+    return;
   }
 
-  std::vector<uint8_t> buffer(chunk_size);
-  size_t bytes_read;
-  while ((bytes_read = fread(buffer.data(), 1, chunk_size, file)) > 0) {
-    if (!data_consumer(buffer.data(), bytes_read)) {
+  size_t written = 0;
+  while (written < len) {
+    size_t to_write = std::min(chunk_size, len - written);
+    bool ok = fwrite(buffer + written, 1, to_write, file);
+    if (!ok) {
+      ESP_LOGE(TAG, "Failed to write chunk to file");
       break;
     }
+    written += to_write;
   }
 
   fclose(file);
-  return true;
+  this->update_sensors();
+}
+
+std::vector<uint8_t> SdMmc::read_file_chunked(char const *path, size_t offset, size_t chunk_size) {
+  std::string absolut_path = build_path(path);
+  FILE *file = nullptr;
+  file = fopen(absolut_path.c_str(), "rb");
+  if (file == nullptr) {
+    ESP_LOGE(TAG, "Failed to open file for chunked reading");
+    return std::vector<uint8_t>();
+  }
+
+  if (fseek(file, offset, SEEK_SET) != 0) {
+    ESP_LOGE(TAG, "Failed to seek to position");
+    fclose(file);
+    return std::vector<uint8_t>();
+  }
+
+  std::vector<uint8_t> res;
+  res.resize(chunk_size);
+  size_t read = fread(res.data(), 1, chunk_size, file);
+  if (read < chunk_size) {
+    res.resize(read);
+  }
+
+  fclose(file);
+  return res;
 }
 
 bool SdMmc::create_directory(const char *path) {
@@ -163,6 +183,29 @@ bool SdMmc::delete_file(const char *path) {
   return true;
 }
 
+std::vector<uint8_t> SdMmc::read_file(char const *path) {
+  ESP_LOGV(TAG, "Read File: %s", path);
+  std::string absolut_path = build_path(path);
+  FILE *file = nullptr;
+  file = fopen(absolut_path.c_str(), "rb");
+  if (file == nullptr) {
+    ESP_LOGE(TAG, "Failed to open file for reading");
+    return std::vector<uint8_t>();
+  }
+
+  std::vector<uint8_t> res;
+  size_t fileSize = this->file_size(path);
+  res.resize(fileSize);
+  size_t len = fread(res.data(), 1, fileSize, file);
+  fclose(file);
+  if (len < 0) {
+    ESP_LOGE(TAG, "Failed to read file: %s", strerror(errno));
+    return std::vector<uint8_t>();
+  }
+
+  return res;
+}
+
 std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth,
                                                                   std::vector<FileInfo> &list) {
   ESP_LOGV(TAG, "Listing directory file info: %s\n", path);
@@ -198,7 +241,7 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
     list.emplace_back(entry_path, file_size, entry->d_type == DT_DIR);
 
     if (entry->d_type == DT_DIR && depth) {
-      list_directory_file_info_rec(entry_path, depth - 1, list);
+      list_directory_file_info_rec(entry_absolut_path, depth - 1, list);
     }
   }
   closedir(dir);
@@ -210,7 +253,7 @@ bool SdMmc::is_directory(const char *path) {
   DIR *dir = opendir(absolut_path.c_str());
   if (dir) {
     closedir(dir);
-    return true;
+    return dir != nullptr;
   }
   return false;
 }
@@ -262,7 +305,7 @@ void SdMmc::update_sensors() {
   }
   for (auto &sensor : this->file_size_sensors_) {
     if (sensor.sensor != nullptr)
-      sensor.sensor->publish_state(this->file_size(sensor.path.c_str()));
+      sensor.sensor->publish_state(this->file_size(sensor.path));
   }
 #endif
 }
@@ -271,6 +314,7 @@ void SdMmc::update_sensors() {
 }  // namespace esphome
 
 #endif  // USE_ESP_IDF
+
 
 
 
