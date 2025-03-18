@@ -481,6 +481,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       content_type = "audio/mpeg";
     } else if (ext == "wav") {
       content_type = "audio/wav";
+    } else if (ext == "flac") {
+      content_type = "audio/flac";  
     }
   }
 
