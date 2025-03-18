@@ -1,7 +1,5 @@
 #include "sd_mmc_card.h"
-
 #include <algorithm>
-
 #include "math.h"
 #include "esphome/core/log.h"
 
@@ -51,14 +49,20 @@ void SdMmc::dump_config() {
   }
 }
 
-void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
-  ESP_LOGV(TAG, "Writing to file: %s", path);
-  this->write_file(path, buffer, len, "w");
+bool SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
+  return this->write_file(path, [buffer, len](uint8_t *data, size_t size) {
+    size_t to_copy = std::min(len, size);
+    memcpy(data, buffer, to_copy);
+    return to_copy;
+  }, len);
 }
 
-void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
-  ESP_LOGV(TAG, "Appending to file: %s", path);
-  this->write_file(path, buffer, len, "a");
+bool SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
+  return this->write_file(path, [buffer, len](uint8_t *data, size_t size) {
+    size_t to_copy = std::min(len, size);
+    memcpy(data, buffer, to_copy);
+    return to_copy;
+  }, len);
 }
 
 std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
@@ -88,29 +92,11 @@ bool SdMmc::is_directory(std::string const &path) { return this->is_directory(pa
 
 bool SdMmc::delete_file(std::string const &path) { return this->delete_file(path.c_str()); }
 
-std::vector<uint8_t> SdMmc::read_file(std::string const &path) { return this->read_file(path.c_str()); }
-
 #ifdef USE_SENSOR
 void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
   this->file_size_sensors_.emplace_back(sensor, path);
 }
 #endif
-
-void SdMmc::set_clk_pin(uint8_t pin) { this->clk_pin_ = pin; }
-
-void SdMmc::set_cmd_pin(uint8_t pin) { this->cmd_pin_ = pin; }
-
-void SdMmc::set_data0_pin(uint8_t pin) { this->data0_pin_ = pin; }
-
-void SdMmc::set_data1_pin(uint8_t pin) { this->data1_pin_ = pin; }
-
-void SdMmc::set_data2_pin(uint8_t pin) { this->data2_pin_ = pin; }
-
-void SdMmc::set_data3_pin(uint8_t pin) { this->data3_pin_ = pin; }
-
-void SdMmc::set_mode_1bit(bool b) { this->mode_1bit_ = b; }
-
-void SdMmc::set_power_ctrl_pin(GPIOPin *pin) { this->power_ctrl_pin_ = pin; }
 
 std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
   switch (code) {
