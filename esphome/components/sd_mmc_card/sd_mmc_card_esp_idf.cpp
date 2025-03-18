@@ -289,3 +289,4 @@ void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path
 #endif  // USE_ESP_IDF
 
 
+
