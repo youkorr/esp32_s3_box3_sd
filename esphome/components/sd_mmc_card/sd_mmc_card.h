@@ -13,7 +13,7 @@
 #ifdef USE_ESP_IDF
 #include "sdmmc_cmd.h"
 #endif
-#include <functional> // Required for std::functional
+#include <functional>
 #include <vector>
 #include "esphome/core/log.h"
 
@@ -59,9 +59,11 @@ class SdMmc : public Component {
   void loop() override;
   void dump_config() override;
 
-  // Data provider is for output, data_consumer is for input
+  bool write_file(const char *path, const uint8_t *buffer, size_t len);
+  bool append_file(const char *path, const uint8_t *buffer, size_t len);
   bool write_file(const char *path, std::function<size_t(uint8_t *, size_t)> data_provider, size_t chunk_size);
   bool read_file(const char *path, std::function<bool(const uint8_t*, size_t)> data_consumer, size_t chunk_size);
+  std::vector<uint8_t> read_file(const char *path);
 
   bool delete_file(const char *path);
   bool delete_file(std::string const &path);
@@ -88,6 +90,7 @@ class SdMmc : public Component {
   void set_power_ctrl_pin(GPIOPin *pin) { this->power_ctrl_pin_ = pin; }
 
   std::string error_code_to_string(ErrorCode code);
+  std::string sd_card_type() const;
 
  protected:
   uint8_t clk_pin_{0};
@@ -112,9 +115,5 @@ class SdMmc : public Component {
 
 long double convertBytes(uint64_t value, MemoryUnits unit);
 
-FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
-    : path(path), size(size), is_directory(is_directory) {}
-
 }  // namespace sd_mmc_card
 }  // namespace esphome
-
