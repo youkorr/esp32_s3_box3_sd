@@ -189,7 +189,7 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
     strlcpy(entry_absolut_path + dirpath_len, entry_path, sizeof(entry_absolut_path) - dirpath_len);
     if (entry->d_type != DT_DIR) {
       struct stat info;
-      if (stat(entry_absolut_path.c_str(), &info) < 0) {
+      if (stat(entry_absolut_path, &info) < 0) {
         ESP_LOGE(TAG, "Failed to stat file: %s '%s' %s", strerror(errno), entry->d_name, entry_absolut_path);
       } else {
         file_size = info.st_size;
@@ -198,7 +198,7 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
     list.emplace_back(entry_path, file_size, entry->d_type == DT_DIR);
 
     if (entry->d_type == DT_DIR && depth) {
-      list_directory_file_info_rec(entry_absolut_path, depth - 1, list);
+      list_directory_file_info_rec(entry_path, depth - 1, list);
     }
   }
   closedir(dir);
@@ -210,7 +210,7 @@ bool SdMmc::is_directory(const char *path) {
   DIR *dir = opendir(absolut_path.c_str());
   if (dir) {
     closedir(dir);
-    return dir != nullptr;
+    return true;
   }
   return false;
 }
@@ -249,8 +249,8 @@ void SdMmc::update_sensors() {
   if (!res) {
     tot_sect = (fs->n_fatent - 2) * fs->csize;
     fre_sect = fre_clust * fs->csize;
-    total_bytes = static_cast(tot_sect) * FF_SS_SDCARD;
-    free_bytes = static_cast(fre_sect) * FF_SS_SDCARD;
+    total_bytes = static_cast<uint64_t>(tot_sect) * FF_SS_SDCARD;
+    free_bytes = static_cast<uint64_t>(fre_sect) * FF_SS_SDCARD;
     used_bytes = total_bytes - free_bytes;
 
     if (this->used_space_sensor_ != nullptr)
@@ -262,7 +262,7 @@ void SdMmc::update_sensors() {
   }
   for (auto &sensor : this->file_size_sensors_) {
     if (sensor.sensor != nullptr)
-      sensor.sensor->publish_state(this->file_size(sensor.path));
+      sensor.sensor->publish_state(this->file_size(sensor.path.c_str()));
   }
 #endif
 }
@@ -271,5 +271,6 @@ void SdMmc::update_sensors() {
 }  // namespace esphome
 
 #endif  // USE_ESP_IDF
+
 
 
