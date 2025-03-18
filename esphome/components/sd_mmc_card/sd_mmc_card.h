@@ -13,8 +13,7 @@
 #ifdef USE_ESP_IDF
 #include "sdmmc_cmd.h"
 #endif
-
-#include <functional> // Required for std::function
+#include <functional>
 
 namespace esphome {
 namespace sd_mmc_card {
@@ -57,23 +56,14 @@ class SdMmc : public Component {
   void setup() override;
   void loop() override;
   void dump_config() override;
-  void write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode);
-  void write_file(const char *path, const uint8_t *buffer, size_t len);
-  void append_file(const char *path, const uint8_t *buffer, size_t len);
 
-  // Modified write_file_chunked function
-  void write_file_chunked(const char *path, std::function<size_t(uint8_t *, size_t)> data_provider, size_t chunk_size);
+  bool write_file(const char *path, std::function<size_t(uint8_t *, size_t)> data_provider, size_t chunk_size);
+  bool read_file(const char *path, std::function<bool(const uint8_t*, size_t)> data_consumer, size_t chunk_size);
 
   bool delete_file(const char *path);
   bool delete_file(std::string const &path);
   bool create_directory(const char *path);
   bool remove_directory(const char *path);
-  std::vector<uint8_t> read_file(char const *path);
-  std::vector<uint8_t> read_file(std::string const &path);
-  std::vector<uint8_t> read_file_chunked(char const *path, size_t offset, size_t chunk_size);
-  std::vector<uint8_t> read_file_chunked(std::string const &path, size_t offset, size_t chunk_size);
-  bool is_directory(const char *path);
-  bool is_directory(std::string const &path);
   std::vector<std::string> list_directory(const char *path, uint8_t depth);
   std::vector<std::string> list_directory(std::string path, uint8_t depth);
   std::vector<FileInfo> list_directory_file_info(const char *path, uint8_t depth);
@@ -123,4 +113,5 @@ FileInfo::FileInfo(std::string const &path, size_t size, bool is_directory)
 
 }  // namespace sd_mmc_card
 }  // namespace esphome
+
 
