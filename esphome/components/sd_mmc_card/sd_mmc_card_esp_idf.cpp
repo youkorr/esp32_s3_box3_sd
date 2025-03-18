@@ -81,7 +81,6 @@ std::vector<uint8_t> SdMmc::read_file(char const *path) {
     return std::vector<uint8_t>();
   }
 
-  // Utiliser une taille de tampon plus petite
   const size_t buffer_size = 512; // Un secteur SD standard
   std::vector<uint8_t> buffer(buffer_size);
   std::vector<uint8_t> res;
@@ -89,15 +88,13 @@ std::vector<uint8_t> SdMmc::read_file(char const *path) {
   size_t total_read = 0;
   size_t bytes_read = 0;
   
-  // Lire par morceaux pour économiser la mémoire
   while ((bytes_read = fread(buffer.data(), 1, buffer_size, file)) > 0) {
     res.insert(res.end(), buffer.data(), buffer.data() + bytes_read);
     total_read += bytes_read;
     
-    // Option: vider périodiquement le cache pour économiser davantage de mémoire
+    // Option: Afficher la progression de la lecture
     if (total_read % 4096 == 0) {
       ESP_LOGV(TAG, "Read progress: %d bytes", total_read);
-      yield(); // Permettre à FreeRTOS de faire d'autres tâches si nécessaire
     }
   }
   
@@ -114,7 +111,6 @@ void SdMmc::write_file_chunked(const char *path, const uint8_t *buffer, size_t l
     return;
   }
 
-  // Limiter la taille des fragments à un maximum raisonnable
   const size_t max_chunk = 512; // Un secteur SD standard
   chunk_size = std::min(chunk_size, max_chunk);
   
@@ -128,13 +124,11 @@ void SdMmc::write_file_chunked(const char *path, const uint8_t *buffer, size_t l
     }
     written += chunk_written;
     
-    // Vider le tampon du fichier après chaque morceau pour éviter d'accumuler les données
     fflush(file);
     
-    // Donner du temps au système
+    // Option: Afficher la progression de l'écriture
     if (written % 4096 == 0) {
       ESP_LOGV(TAG, "Write progress: %d/%d bytes", written, len);
-      yield();
     }
   }
 
@@ -142,8 +136,7 @@ void SdMmc::write_file_chunked(const char *path, const uint8_t *buffer, size_t l
   this->update_sensors();
 }
 
-std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth,
-                                                                std::vector<FileInfo> &list) {
+std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth, std::vector<FileInfo> &list) {
   ESP_LOGV(TAG, "Listing directory file info: %s\n", path);
   std::string absolut_path = build_path(path);
   DIR *dir = opendir(absolut_path.c_str());
@@ -152,16 +145,13 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
     return list;
   }
 
-  // Allouer les tampons sur le tas une seule fois
   char entry_absolut_path[FILE_PATH_MAX] = {0};
   char entry_path[FILE_PATH_MAX] = {0};
   const size_t dirpath_len = MOUNT_POINT.size();
   
-  // Copier le chemin de base une seule fois
   strlcpy(entry_path, path, sizeof(entry_path));
   size_t entry_path_len = strlen(entry_path);
   
-  // S'assurer que le chemin se termine par un slash
   if (entry_path_len > 0 && entry_path[entry_path_len-1] != '/') {
     if (entry_path_len + 2 >= FILE_PATH_MAX) {
       ESP_LOGE(TAG, "Path too long");
@@ -223,9 +213,6 @@ std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *pa
       // Réinitialiser le chemin pour la prochaine itération
       entry_path[entry_path_len] = '\0';
     }
-    
-    // Permettre d'autres tâches de s'exécuter pendant un scan de répertoire long
-    yield();
   }
   
   closedir(dir);
@@ -247,7 +234,6 @@ std::vector<uint8_t> SdMmc::read_file_chunked(char const *path, size_t offset, s
     return std::vector<uint8_t>();
   }
 
-  // Limiter la taille des fragments pour économiser la mémoire
   const size_t max_chunk_size = 1024; // Ajustez selon vos besoins
   size_t actual_chunk_size = std::min(chunk_size, max_chunk_size);
   
@@ -266,6 +252,7 @@ std::vector<uint8_t> SdMmc::read_file_chunked(char const *path, size_t offset, s
 }  // namespace sd_mmc_card
 }  // namespace esphome
 #endif  // USE_ESP_IDF
+
 
 
 
