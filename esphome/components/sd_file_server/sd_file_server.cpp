@@ -1,12 +1,19 @@
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
-#include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
+#include "esphome/components/network/util.h"
 
 namespace esphome {
 namespace sd_file_server {
 
 static const char *TAG = "sd_file_server";
+
+// Variables statiques pour l'upload
+static std::string upload_path;
+static FILE *upload_file = nullptr;
+static size_t total_size = 0;
+static bool use_chunked_mode = false;
+static std::vector<uint8_t> current_chunk;
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
@@ -17,19 +24,16 @@ void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
   ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
   ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Deletation Enabled: %s", TRUEFALSE(this->deletion_enabled_));
-  ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
-  ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
+  ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", TRUEFALSE(this->deletion_enabled_));
+  ESP_LOGCONFIG(TAG, "  Download Enabled: %s", TRUEFALSE(this->download_enabled_));
+  ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", TRUEFALSE(this->upload_enabled_));
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "can handle %s %u", request->url().c_str(),
-           str_startswith(std::string(request->url().c_str()), this->build_prefix()));
   return str_startswith(std::string(request->url().c_str()), this->build_prefix());
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "%s", request->url().c_str());
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
       this->handle_get(request);
@@ -48,51 +52,116 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
   }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
 
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
-  std::string file_name(filename.c_str());
+  // Première partie du fichier
   if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
-    return;
+    std::string path = extract_path_from_url(request->url().c_str());
+    path = build_absolute_path(path);
+
+    std::string dir = path.substr(0, path.find_last_of('/'));
+    if (!this->sd_mmc_card_->is_directory(dir.c_str())) {
+      ESP_LOGI(TAG, "Creating directory: %s", dir.c_str());
+      if (!this->sd_mmc_card_->create_directory(dir.c_str())) {
+        request->send(500, "text/plain", "Failed to create directory");
+        return;
+      }
+    }
+
+    upload_path = path;
+    total_size = 0;
+    use_chunked_mode = (request->contentLength() > 40 * 1024);
+
+    if (!use_chunked_mode) {
+      upload_file = fopen(path.c_str(), "wb");
+      if (upload_file == nullptr) {
+        request->send(500, "text/plain", "Failed to create file");
+        return;
+      }
+    }
   }
-  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
+
+  // Traitement des données
+  if (!use_chunked_mode) {
+    if (upload_file != nullptr) {
+      size_t bytes_written = fwrite(data, 1, len, upload_file);
+      if (bytes_written != len) {
+        ESP_LOGE(TAG, "Write error");
+        fclose(upload_file);
+        upload_file = nullptr;
+        request->send(500, "text/plain", "Write error");
+        return;
+      }
+      total_size += bytes_written;
+    }
+  } else {
+    current_chunk.insert(current_chunk.end(), data, data + len);
+    total_size += len;
+
+    if (final || current_chunk.size() > 32 * 1024) {
+      bool success = this->write_file_chunked(upload_path, [&](uint8_t* buffer, size_t max_len) -> size_t {
+        size_t bytes_to_copy = std::min(current_chunk.size(), max_len);
+        memcpy(buffer, current_chunk.data(), bytes_to_copy);
+        current_chunk.erase(current_chunk.begin(), current_chunk.begin() + bytes_to_copy);
+        return bytes_to_copy;
+      }, 4096);
+
+      if (!success) {
+        request->send(500, "text/plain", "Write error in chunked mode");
+        return;
+      }
+    }
+  }
+
+  // Partie finale du fichier
   if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
+    if (!use_chunked_mode && upload_file != nullptr) {
+      fclose(upload_file);
+      upload_file = nullptr;
+    }
+
+    ESP_LOGI(TAG, "Upload complete: %s (%d bytes)", upload_path.c_str(), total_size);
+    std::string redir = Path::join(url_prefix_, Path::remove_root_path(upload_path, root_path_));
+    redir = redir.substr(0, redir.find_last_of('/') + 1);
+    request->redirect(redir.c_str());
   }
 }
 
+bool SDFileServer::write_file_chunked(const std::string &path, const std::function<size_t(uint8_t*, size_t)> &data_provider, size_t chunk_size) {
+  FILE *file = fopen(path.c_str(), "ab");
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file for writing: %s", path.c_str());
+    return false;
+  }
+
+  uint8_t buffer[chunk_size];
+  size_t bytes_read;
+  while ((bytes_read = data_provider(buffer, chunk_size)) > 0) {
+    size_t bytes_written = fwrite(buffer, 1, bytes_read, file);
+    if (bytes_written != bytes_read) {
+      ESP_LOGE(TAG, "Write error: %s", path.c_str());
+      fclose(file);
+      return false;
+    }
+  }
+
+  fclose(file);
+  return true;
+}
+
 void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
-
 void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = path; }
-
 void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
-
 void SDFileServer::set_deletion_enabled(bool allow) { this->deletion_enabled_ = allow; }
-
 void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = allow; }
-
 void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allow; }
 
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
   std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
   std::string path = this->build_absolute_path(extracted);
-
   if (!this->sd_mmc_card_->is_directory(path)) {
     handle_download(request, path);
     return;
   }
-
   handle_index(request, path);
 }
 
@@ -110,7 +179,6 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
     response->print(file_name.c_str());
   }
   response->print("</td><td>");
-
   if (info.is_directory) {
     response->print("Folder");
   } else {
@@ -144,10 +212,10 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
   AsyncResponseStream *response = request->beginResponseStream("text/html");
   response->print(F(R"(
   <!DOCTYPE html>
-  <html lang=\"en\">
+  <html lang="en">
   <head>
     <meta charset=UTF-8>
-    <meta name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">
+    <meta name=viewport content="width=device-width, initial-scale=1,user-scalable=no">
     <title>SD Card Files</title>
     <style>
     body {
@@ -263,7 +331,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     </div>
     <div class="breadcrumb">
       <a href="/">Home</a>)"));
-
   std::string current_path = "/";
   std::string relative_path = Path::join(this->url_prefix_, Path::remove_root_path(path, this->root_path_));
   std::vector<std::string> parts = Path::split_path(relative_path);
@@ -278,22 +345,18 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
     }
   }
   response->print(F("</div>"));
-
   if (this->upload_enabled_)
     response->print(F("<div class=\"upload-form\"><form method=\"POST\" enctype=\"multipart/form-data\">"
                       "<input type=\"file\" name=\"file\"><input type=\"submit\" value=\"upload\"></form></div>"));
-
   response->print(F("<table><thead><tr>"
                     "<th>Name</th>"
                     "<th>Type</th>"
                     "<th>Size</th>"
                     "<th>Actions</th>"
                     "</tr></thead><tbody>"));
-
   auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
   for (auto const &entry : entries)
     write_row(response, entry);
-
   response->print(F("</tbody></table>"
                     "<script>"
                     "function delete_file(path) {fetch(path, {method: \"DELETE\"});}"
@@ -308,7 +371,6 @@ void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string cons
                     "} "
                     "</script>"
                     "</body></html>"));
-
   request->send(response);
 }
 
@@ -317,7 +379,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
-
   auto file = this->sd_mmc_card_->read_file(path);
   if (file.size() == 0) {
     request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
@@ -329,7 +390,6 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
   auto *response = request->beginResponseStream(Path::mime_type(path).c_str(), file.size());
   response->write(file.data(), file.size());
 #endif
-
   request->send(response);
 }
 
