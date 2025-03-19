@@ -91,7 +91,8 @@ std::string Path::join(std::string const &first, std::string const &second) {
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
-  if (!str_startswith(path, root)) return path;
+  if (!str_startswith(path, root))
+    return path;
 
   path.erase(0, root.size());
   if (path.empty() || path[0] != separator) {
@@ -101,13 +102,12 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
   return path;
 }
 
+SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base), sd_mmc_(nullptr) {}
+
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base, sd_mmc_card::SdMmc *sd_mmc)
     : base_(base), sd_mmc_(sd_mmc) {}
 
-void SDFileServer::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up SD file server...");
-  this->base_->add_handler(this);
-}
+void SDFileServer::setup() { this->base_->add_handler(this); }
 
 void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "SD File Server:");
@@ -116,7 +116,6 @@ void SDFileServer::dump_config() {
 }
 
 void SDFileServer::set_url_prefix(const std::string &url_prefix) { this->url_prefix_ = url_prefix; }
-
 void SDFileServer::set_sd_mmc(sd_mmc_card::SdMmc *sd_mmc) { this->sd_mmc_ = sd_mmc; }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) { return true; }
@@ -145,7 +144,8 @@ void SDFileServer::handle_web_request(AsyncWebServerRequest *request) {
 
   // 3. Handle special endpoints (e.g., /upload, /download)
   if (url == "/upload" && request->method() == HTTP_POST) {
-    handleUpload(request);
+    //  handleUpload(request); //Original method
+    request->send(400, "text/plain", "Missing filename");
   } else if (str_startswith(url, "/download")) {
     handleDownload(request);
   } else {
@@ -154,50 +154,28 @@ void SDFileServer::handle_web_request(AsyncWebServerRequest *request) {
   }
 }
 
-void SDFileServer::handleUpload(AsyncWebServerRequest *request) {
-  // This is a simplified upload handler.  For true chunked uploads, you would
-  // need to use a custom stream class.
-  if (!request->hasParam("filename", true)) {
-    request->send(400, "text/plain", "Missing filename");
-    return;
-  }
-
-  std::string filename = request->getParam("filename", true)->value().c_str();
-  ESP_LOGI(TAG, "Start uploading file: %s", filename.c_str());
-
-  // Accumulate the data from the request
-  std::vector<uint8_t> file_content;
-
-  // Iterate over all the arguments in the request to get the data
-  int params = request->params();
-  for (int i = 0; i < params; i++) {
-    AsyncWebParameter *p = request->getParam(i);
-    if (p->isFile()) {  // Verify that is a file
-      ESP_LOGI(TAG, "File Name: %s", p->name().c_str());
-      ESP_LOGI(TAG, "Size: %u bytes", p->size());
-      ESP_LOGI(TAG, "Content Type: %s", p->contentType().c_str());
-
-      if (p->size() > 0) {
-        // Reserve memory for the file content.
-        file_content.reserve(p->size());
-        file_content.insert(file_content.end(), p->value().begin(), p->value().end());
-      }
+void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+     // Check if the SD card component was set
+    if (this->sd_mmc_ == nullptr) {
+        ESP_LOGE(TAG, "SD card component not initialized!");
+        request->send(500, "text/plain", "SD card component not initialized!");
+        return;
     }
-  }
 
-  // Check if the SD card component was set
-  if (this->sd_mmc_ == nullptr) {
-    ESP_LOGE(TAG, "SD card component not initialized!");
-    request->send(500, "text/plain", "SD card component not initialized!");
-    return;
-  }
+    // Convert String filename to std::string
+    std::string filename_str = filename.c_str();
 
-  // Write to file by chunks
-  this->sd_mmc_->write_file_chunked(filename.c_str(), file_content.data(), file_content.size(), FILE_BUFFER_SIZE);
+    // Log upload details
+    ESP_LOGI(TAG, "handleUpload: filename=%s, index=%d, len=%d, final=%s", filename_str.c_str(), index, len, final ? "true" : "false");
 
-  // Send response
-  request->send(200, "text/plain", "File uploaded successfully");
-  ESP_LOGI(TAG, "Upload done: %s", filename.c_str());
+    // Write chunk to file
+    this->sd_mmc_->write_file_chunked(filename_str.c_str(), data, len, FILE_BUFFER_SIZE);
+
+    // Send response if final chunk
+    if (final) {
+        ESP_LOGI(TAG, "Upload done: %s", filename_str.c_str());
+        request->send(200, "text/plain", "File uploaded successfully");
+    }
 }
 
 void SDFileServer::handleDownload(AsyncWebServerRequest *request) {
