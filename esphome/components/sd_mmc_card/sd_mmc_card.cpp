@@ -7,11 +7,16 @@
 namespace esphome {
 namespace sd_mmc_card {
 
-static const char *TAG = "sd_mmc_card";
+const char *TAG = "sd_mmc_card"; // Définir TAG ici
 
 #ifdef USE_SENSOR
 FileSizeSensor::FileSizeSensor(sensor::Sensor *sensor, std::string const &path) : sensor(sensor), path(path) {}
 #endif
+
+std::string build_path(const char *path) {
+  static const std::string MOUNT_POINT("/sdcard");
+  return MOUNT_POINT + path;
+}
 
 void SdMmc::loop() {}
 
@@ -48,18 +53,6 @@ void SdMmc::dump_config() {
     ESP_LOGE(TAG, "Setup failed : %s", SdMmc::error_code_to_string(this->init_error_).c_str());
     return;
   }
-}
-
-bool SdMmc::write_file_chunked(const char *path, size_t chunk_size,
-                               std::function<std::vector<uint8_t>(size_t)> data_provider) {
-  ESP_LOGE(TAG, "write_file_chunked not implemented in generic version");
-  return false;
-}
-
-bool SdMmc::read_file_chunked(const char *path, size_t chunk_size,
-                              std::function<void(const std::vector<uint8_t> &)> data_consumer) {
-  ESP_LOGE(TAG, "read_file_chunked not implemented in generic version");
-  return false;
 }
 
 std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
