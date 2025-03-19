@@ -17,16 +17,19 @@ void SDFileServer::dump_config() {
   ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
   ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
   ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", TRUEFALSE(this->deletion_enabled_));
+  ESP_LOGCONFIG(TAG, "  Deletation Enabled: %s", TRUEFALSE(this->deletion_enabled_));
   ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
   ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
+  ESP_LOGD(TAG, "can handle %s %u", request->url().c_str(),
+           str_startswith(std::string(request->url().c_str()), this->build_prefix()));
   return str_startswith(std::string(request->url().c_str()), this->build_prefix());
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
+  ESP_LOGD(TAG, "%s", request->url().c_str());
   if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
     if (request->method() == HTTP_GET) {
       this->handle_get(request);
@@ -42,116 +45,31 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
                                 size_t len, bool final) {
   if (!this->upload_enabled_) {
-    request->send(403, "text/plain", "Upload not allowed");
+    request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
   }
+  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+  std::string path = this->build_absolute_path(extracted);
 
-  if (this->sd_mmc_card_ == nullptr) {
-    request->send(500, "text/plain", "SD card not initialized");
+  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
+    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
+    response->addHeader("Connection", "close");
+    request->send(response);
     return;
   }
-
-  static std::string upload_path;
-  static FILE *upload_file = nullptr;
-  static size_t total_size = 0;
-  static bool use_chunked_mode = false;
-  static std::vector<uint8_t> current_chunk;
-
-  // Première partie du fichier
+  std::string file_name(filename.c_str());
   if (index == 0) {
-    std::string path = extract_path_from_url(request->url().c_str());
-    path = build_absolute_path(path);
-
-    std::string dir = path.substr(0, path.find_last_of('/'));
-    if (!this->sd_mmc_card_->is_directory(dir.c_str())) {
-      ESP_LOGI(TAG, "Creating directory: %s", dir.c_str());
-      if (!this->sd_mmc_card_->create_directory(dir.c_str())) {
-        request->send(500, "text/plain", "Failed to create directory");
-        return;
-      }
-    }
-
-    upload_path = path;
-    total_size = 0;
-    use_chunked_mode = (request->contentLength() > 40 * 1024);
-
-    if (!use_chunked_mode) {
-      // upload_file = this->sd_mmc_card_->append_file(path.c_str(), "wb"); //OLD CODE
-      // NEW CODE
-      upload_file = fopen(path.c_str(), "wb");
-      if (upload_file == nullptr) {
-        request->send(500, "text/plain", "Failed to create file");
-        return;
-      }
-    }
+    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
+    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
+    return;
   }
-
-  // Traitement des données
-  if (!use_chunked_mode) {
-    if (upload_file != nullptr) {
-      size_t bytes_written = fwrite(data, 1, len, upload_file);
-      if (bytes_written != len) {
-        ESP_LOGE(TAG, "Write error");
-        fclose(upload_file);
-        upload_file = nullptr;
-        request->send(500, "text/plain", "Write error");
-        return;
-      }
-      total_size += bytes_written;
-    }
-  } else {
-    current_chunk.insert(current_chunk.end(), data, data + len);
-    total_size += len;
-
-    if (final || current_chunk.size() > 32 * 1024) {
-      bool success = this->write_file_chunked(upload_path, [&](uint8_t* buffer, size_t max_len) -> size_t {
-        size_t bytes_to_copy = std::min(current_chunk.size(), max_len);
-        memcpy(buffer, current_chunk.data(), bytes_to_copy);
-        current_chunk.erase(current_chunk.begin(), current_chunk.begin() + bytes_to_copy);
-        return bytes_to_copy;
-      }, 4096);
-
-      if (!success) {
-        request->send(500, "text/plain", "Write error in chunked mode");
-        return;
-      }
-    }
-  }
-
-  // Partie finale du fichier
+  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
   if (final) {
-    if (!use_chunked_mode && upload_file != nullptr) {
-      fclose(upload_file);
-      upload_file = nullptr;
-    }
-
-    ESP_LOGI(TAG, "Upload complete: %s (%d bytes)", upload_path.c_str(), total_size);
-    std::string redir = Path::join(url_prefix_, Path::remove_root_path(upload_path, root_path_));
-    redir = redir.substr(0, redir.find_last_of('/') + 1);
-    request->redirect(redir.c_str());
+    auto response = request->beginResponse(201, "text/html", "upload success");
+    response->addHeader("Connection", "close");
+    request->send(response);
+    return;
   }
-}
-
-bool SDFileServer::write_file_chunked(const std::string &path, const std::function<size_t(uint8_t*, size_t)> &data_provider, size_t chunk_size) {
-  FILE *file = fopen(path.c_str(), "ab");
-  if (!file) {
-    ESP_LOGE(TAG, "Failed to open file for writing: %s", path.c_str());
-    return false;
-  }
-
-  uint8_t buffer[chunk_size];
-  size_t bytes_read;
-  while ((bytes_read = data_provider(buffer, chunk_size)) > 0) {
-    size_t bytes_written = fwrite(buffer, 1, bytes_read, file);
-    if (bytes_written != bytes_read) {
-      ESP_LOGE(TAG, "Write error: %s", path.c_str());
-      fclose(file);
-      return false;
-    }
-  }
-
-  fclose(file);
-  return true;
 }
 
 void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
@@ -489,22 +407,63 @@ std::vector<std::string> Path::split_path(std::string path) {
   size_t pos = 0;
   while ((pos = path.find('/')) != std::string::npos) {
     std::string part = path.substr(0, pos);
-    parts.push_back(part);
+    if (!part.empty()) {
+      parts.push_back(part);
+    }
     path.erase(0, pos + 1);
   }
   parts.push_back(path);
   return parts;
 }
 
-std::string Path::extension(std::string const &);
+std::string Path::extension(std::string const &file) {
+  size_t pos = file.find_last_of('.');
+  if (pos == std::string::npos)
+    return "";
+  return file.substr(pos + 1);
+}
 
-std::string Path::file_type(std::string const &);
+std::string Path::file_type(std::string const &file) {
+  static const std::map<std::string, std::string> file_types = {
+      {"mp3", "Audio (MP3)"},   {"wav", "Audio (WAV)"}, {"png", "Image (PNG)"},   {"jpg", "Image (JPG)"},
+      {"jpeg", "Image (JPEG)"}, {"bmp", "Image (BMP)"}, {"txt", "Text (TXT)"},    {"log", "Text (LOG)"},
+      {"csv", "Text (CSV)"},    {"html", "Web (HTML)"}, {"css", "Web (CSS)"},     {"js", "Web (JS)"},
+      {"json", "Data (JSON)"},  {"xml", "Data (XML)"},  {"zip", "Archive (ZIP)"}, {"gz", "Archive (GZ)"},
+      {"tar", "Archive (TAR)"}, {"mp4", "Video (MP4)"}, {"avi", "Video (AVI)"},   {"webm", "Video (WEBM)"}};
 
-std::string Path::mime_type(std::string const &);
-};
+  std::string ext = Path::extension(file);
+  if (ext.empty())
+    return "File";
+
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+  auto it = file_types.find(ext);
+  if (it != file_types.end())
+    return it->second;
+  return "File (" + ext + ")";
+}
+
+std::string Path::mime_type(std::string const &file) {
+  static const std::map<std::string, std::string> file_types = {
+      {"mp3", "audio/mpeg"},        {"wav", "audio/vnd.wav"},   {"png", "image/png"},       {"jpg", "image/jpeg"},
+      {"jpeg", "image/jpeg"},       {"bmp", "image/bmp"},       {"txt", "text/plain"},      {"log", "text/plain"},
+      {"csv", "text/csv"},          {"html", "text/html"},      {"css", "text/css"},        {"js", "text/javascript"},
+      {"json", "application/json"}, {"xml", "application/xml"}, {"zip", "application/zip"}, {"gz", "application/gzip"},
+      {"tar", "application/x-tar"}, {"mp4", "video/mp4"},       {"avi", "video/x-msvideo"}, {"webm", "video/webm"}};
+
+  std::string ext = Path::extension(file);
+  ESP_LOGD(TAG, "ext : %s", ext.c_str());
+  if (!ext.empty()) {
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+    auto it = file_types.find(ext);
+    if (it != file_types.end())
+      return it->second;
+  }
+  return "application/octet-stream";
+}
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
