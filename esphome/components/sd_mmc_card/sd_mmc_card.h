@@ -20,8 +20,11 @@ namespace sd_mmc_card {
 class SdMmc : public Component {
  public:
   // Déclaration des méthodes
-  bool exists(const std::string& path);
-  size_t get_file_size(const std::string& path);
+  bool exists(const std::string &path);
+  size_t get_file_size(const std::string &path);
+  void setup() override;
+  void loop() override;
+  void dump_config() override;
 
 enum MemoryUnits : short { Byte = 0, KiloByte = 1, MegaByte = 2, GigaByte = 3, TeraByte = 4, PetaByte = 5 };
 
