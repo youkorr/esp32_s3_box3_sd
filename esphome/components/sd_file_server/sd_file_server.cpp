@@ -1,7 +1,7 @@
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
-#include "esphome/core/helpers.h"
 #include "esphome/components/network/util.h"
+#include "esphome/core/helpers.h"
 
 namespace esphome {
 namespace sd_file_server {
@@ -13,7 +13,8 @@ static std::string upload_path;
 static FILE *upload_file = nullptr;
 static size_t total_size = 0;
 static bool use_chunked_mode = false;
-static std::vector<uint8_t> current_chunk;
+static uint8_t current_chunk[16 * 1024]; // Tableau statique pour éviter les allocations dynamiques
+static size_t chunk_size = 0;
 
 SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
 
@@ -55,8 +56,8 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
 
   // Première partie du fichier
   if (index == 0) {
-    std::string path = extract_path_from_url(request->url().c_str());
-    path = build_absolute_path(path);
+    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+    std::string path = this->build_absolute_path(extracted);
 
     std::string dir = path.substr(0, path.find_last_of('/'));
     if (!this->sd_mmc_card_->is_directory(dir.c_str())) {
@@ -67,62 +68,41 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
       }
     }
 
-    upload_path = path;
+    upload_path = Path::join(path, filename.c_str());
     total_size = 0;
-    use_chunked_mode = (request->contentLength() > 40 * 1024);
+    use_chunked_mode = true; // Toujours utiliser le mode chunked
 
-    if (!use_chunked_mode) {
-      upload_file = fopen(path.c_str(), "wb");
-      if (upload_file == nullptr) {
-        request->send(500, "text/plain", "Failed to create file");
-        return;
-      }
-    }
+    ESP_LOGI(TAG, "Starting upload: %s", upload_path.c_str());
   }
 
-  // Traitement des données
-  if (!use_chunked_mode) {
-    if (upload_file != nullptr) {
-      size_t bytes_written = fwrite(data, 1, len, upload_file);
-      if (bytes_written != len) {
-        ESP_LOGE(TAG, "Write error");
-        fclose(upload_file);
-        upload_file = nullptr;
-        request->send(500, "text/plain", "Write error");
-        return;
-      }
-      total_size += bytes_written;
-    }
-  } else {
-    current_chunk.insert(current_chunk.end(), data, data + len);
-    total_size += len;
+  // Ajouter les données au chunk actuel
+  size_t available_space = sizeof(current_chunk) - chunk_size;
+  size_t bytes_to_copy = std::min(len, available_space);
+  memcpy(current_chunk + chunk_size, data, bytes_to_copy);
+  chunk_size += bytes_to_copy;
 
-    if (final || current_chunk.size() > 32 * 1024) {
-      bool success = this->write_file_chunked(upload_path, [&](uint8_t* buffer, size_t max_len) -> size_t {
-        size_t bytes_to_copy = std::min(current_chunk.size(), max_len);
-        memcpy(buffer, current_chunk.data(), bytes_to_copy);
-        current_chunk.erase(current_chunk.begin(), current_chunk.begin() + bytes_to_copy);
-        return bytes_to_copy;
-      }, 4096);
+  // Écrire le chunk si le buffer est plein ou si c'est la fin
+  if (chunk_size == sizeof(current_chunk) || final) {
+    bool success = this->write_file_chunked(upload_path, [&](uint8_t* buffer, size_t max_len) -> size_t {
+      size_t bytes_to_write = std::min(chunk_size, max_len);
+      memcpy(buffer, current_chunk, bytes_to_write);
+      memmove(current_chunk, current_chunk + bytes_to_write, chunk_size - bytes_to_write);
+      chunk_size -= bytes_to_write;
+      return bytes_to_write;
+    }, 4096);
 
-      if (!success) {
-        request->send(500, "text/plain", "Write error in chunked mode");
-        return;
-      }
+    if (!success) {
+      request->send(500, "text/plain", "Write error in chunked mode");
+      return;
     }
   }
 
   // Partie finale du fichier
   if (final) {
-    if (!use_chunked_mode && upload_file != nullptr) {
-      fclose(upload_file);
-      upload_file = nullptr;
-    }
-
     ESP_LOGI(TAG, "Upload complete: %s (%d bytes)", upload_path.c_str(), total_size);
-    std::string redir = Path::join(url_prefix_, Path::remove_root_path(upload_path, root_path_));
-    redir = redir.substr(0, redir.find_last_of('/') + 1);
-    request->redirect(redir.c_str());
+    auto response = request->beginResponse(201, "text/html", "upload success");
+    response->addHeader("Connection", "close");
+    request->send(response);
   }
 }
 
@@ -142,6 +122,7 @@ bool SDFileServer::write_file_chunked(const std::string &path, const std::functi
       fclose(file);
       return false;
     }
+    fflush(file); // Forcer l'écriture sur le disque
   }
 
   fclose(file);
