@@ -38,6 +38,17 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   request->redirect("http://192.168.1.60:8080");
 }
 
+// Implémentation de la méthode manquante qui cause l'erreur de liaison
+void SDFileServer::handleUpload(web_server_idf::AsyncWebServerRequest *request, 
+                              const std::string &filename, 
+                              size_t index, 
+                              uint8_t *data, 
+                              size_t len, 
+                              bool final) {
+  // Cette méthode est requise par l'interface mais nous ne l'utilisons pas
+  // puisque toutes les requêtes sont redirigées vers FileBrowser
+}
+
 void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
 void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = path; }
 void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
