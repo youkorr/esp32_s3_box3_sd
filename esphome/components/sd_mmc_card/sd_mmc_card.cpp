@@ -1,7 +1,6 @@
 #include "sd_mmc_card.h"
 
 #include <algorithm>
-
 #include "math.h"
 #include "esphome/core/log.h"
 
@@ -51,66 +50,17 @@ void SdMmc::dump_config() {
   }
 }
 
-void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len) {
-  ESP_LOGV(TAG, "Writing to file: %s", path);
-  this->write_file(path, buffer, len, "w");
+bool SdMmc::write_file_chunked(const char *path, size_t chunk_size,
+                               std::function<std::vector<uint8_t>(size_t)> data_provider) {
+  ESP_LOGE(TAG, "write_file_chunked not implemented in generic version");
+  return false;
 }
 
-void SdMmc::append_file(const char *path, const uint8_t *buffer, size_t len) {
-  ESP_LOGV(TAG, "Appending to file: %s", path);
-  this->write_file(path, buffer, len, "a");
+bool SdMmc::read_file_chunked(const char *path, size_t chunk_size,
+                              std::function<void(const std::vector<uint8_t> &)> data_consumer) {
+  ESP_LOGE(TAG, "read_file_chunked not implemented in generic version");
+  return false;
 }
-
-std::vector<std::string> SdMmc::list_directory(const char *path, uint8_t depth) {
-  std::vector<std::string> list;
-  std::vector<FileInfo> infos = list_directory_file_info(path, depth);
-  std::transform(infos.cbegin(), infos.cend(), list.begin(), [](FileInfo const &info) { return info.path; });
-  return list;
-}
-
-std::vector<std::string> SdMmc::list_directory(std::string path, uint8_t depth) {
-  return this->list_directory(path.c_str(), depth);
-}
-
-std::vector<FileInfo> SdMmc::list_directory_file_info(const char *path, uint8_t depth) {
-  std::vector<FileInfo> list;
-  list_directory_file_info_rec(path, depth, list);
-  return list;
-}
-
-std::vector<FileInfo> SdMmc::list_directory_file_info(std::string path, uint8_t depth) {
-  return this->list_directory_file_info(path.c_str(), depth);
-}
-
-size_t SdMmc::file_size(std::string const &path) { return this->file_size(path.c_str()); }
-
-bool SdMmc::is_directory(std::string const &path) { return this->is_directory(path.c_str()); }
-
-bool SdMmc::delete_file(std::string const &path) { return this->delete_file(path.c_str()); }
-
-std::vector<uint8_t> SdMmc::read_file(std::string const &path) { return this->read_file(path.c_str()); }
-
-#ifdef USE_SENSOR
-void SdMmc::add_file_size_sensor(sensor::Sensor *sensor, std::string const &path) {
-  this->file_size_sensors_.emplace_back(sensor, path);
-}
-#endif
-
-void SdMmc::set_clk_pin(uint8_t pin) { this->clk_pin_ = pin; }
-
-void SdMmc::set_cmd_pin(uint8_t pin) { this->cmd_pin_ = pin; }
-
-void SdMmc::set_data0_pin(uint8_t pin) { this->data0_pin_ = pin; }
-
-void SdMmc::set_data1_pin(uint8_t pin) { this->data1_pin_ = pin; }
-
-void SdMmc::set_data2_pin(uint8_t pin) { this->data2_pin_ = pin; }
-
-void SdMmc::set_data3_pin(uint8_t pin) { this->data3_pin_ = pin; }
-
-void SdMmc::set_mode_1bit(bool b) { this->mode_1bit_ = b; }
-
-void SdMmc::set_power_ctrl_pin(GPIOPin *pin) { this->power_ctrl_pin_ = pin; }
 
 std::string SdMmc::error_code_to_string(SdMmc::ErrorCode code) {
   switch (code) {
