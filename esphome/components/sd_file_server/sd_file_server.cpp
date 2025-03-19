@@ -14,9 +14,9 @@ void SDFileServer::setup() {
   this->base_->add_handler(this);
 
   // Désactivation des fonctionnalités redondantes
-  this->set_deletion_enabled(false);
-  this->set_download_enabled(false);
-  this->set_upload_enabled(false);
+  this->set_deletion_enabled(enabled);
+  this->set_download_enabled(enabled);
+  this->set_upload_enabled(enabled);
 }
 
 void SDFileServer::dump_config() {
