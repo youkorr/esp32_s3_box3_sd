@@ -30,6 +30,7 @@ std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
     {"mp3", "Audio (MP3)"},
     {"wav", "Audio (WAV)"},
+    {"flac", "Audio (FLAC)"},
     {"png", "Image (PNG)"},
     {"jpg", "Image (JPG)"},
     {"jpeg", "Image (JPEG)"},
