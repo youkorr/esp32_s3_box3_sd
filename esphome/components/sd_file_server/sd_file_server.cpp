@@ -76,7 +76,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     use_chunked_mode = (request->contentLength() > 40 * 1024);
 
     if (!use_chunked_mode) {
-      upload_file = this->sd_mmc_card_->open_file(path.c_str(), "wb");
+      upload_file = this->sd_mmc_card_->append_file(path.c_str(), "wb");
       if (upload_file == nullptr) {
         request->send(500, "text/plain", "Failed to create file");
         return;
@@ -139,7 +139,7 @@ bool SDFileServer::write_file_chunked(const std::string &path, const std::functi
 
   uint8_t buffer[chunk_size];
   size_t bytes_read;
-  while ((bytes_read = data_provider(buffer, chunk_size)) {
+  while ((bytes_read = data_provider(buffer, chunk_size)) > 0) {
     size_t bytes_written = fwrite(buffer, 1, bytes_read, file);
     if (bytes_written != bytes_read) {
       ESP_LOGE(TAG, "Write error: %s", path.c_str());
@@ -474,6 +474,47 @@ std::string Path::join(std::string const &first, std::string const &second) {
   return result;
 }
 
+std::string Path::file_type(std::string const &path) {
+  size_t pos = path.rfind('.');
+  if (pos == std::string::npos) {
+    return "";
+  }
+  return path.substr(pos + 1);
+}
+
+std::string Path::mime_type(std::string const &path) {
+  std::string type = file_type(path);
+  if (type == "html" || type == "htm")
+    return "text/html";
+  if (type == "css")
+    return "text/css";
+  if (type == "js")
+    return "application/javascript";
+  if (type == "json")
+    return "application/json";
+  if (type == "png")
+    return "image/png";
+  if (type == "jpg" || type == "jpeg")
+    return "image/jpeg";
+  if (type == "gif")
+    return "image/gif";
+  if (type == "svg")
+    return "image/svg+xml";
+  if (type == "ico")
+    return "image/x-icon";
+  if (type == "woff")
+    return "font/woff";
+  if (type == "woff2")
+    return "font/woff2";
+  if (type == "ttf")
+    return "font/ttf";
+  if (type == "eot")
+    return "font/eot";
+  if (type == "otf")
+    return "font/otf";
+  return "application/octet-stream";
+}
+
 std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (!str_startswith(path, root))
     return path;
@@ -487,62 +528,16 @@ std::vector<std::string> Path::split_path(std::string path) {
   size_t pos = 0;
   while ((pos = path.find('/')) != std::string::npos) {
     std::string part = path.substr(0, pos);
-    if (!part.empty()) {
-      parts.push_back(part);
-    }
+    parts.push_back(part);
     path.erase(0, pos + 1);
   }
   parts.push_back(path);
   return parts;
 }
 
-std::string Path::extension(std::string const &file) {
-  size_t pos = file.find_last_of('.');
-  if (pos == std::string::npos)
-    return "";
-  return file.substr(pos + 1);
-}
-
-std::string Path::file_type(std::string const &file) {
-  static const std::map<std::string, std::string> file_types = {
-      {"mp3", "Audio (MP3)"},   {"wav", "Audio (WAV)"}, {"png", "Image (PNG)"},   {"jpg", "Image (JPG)"},
-      {"jpeg", "Image (JPEG)"}, {"bmp", "Image (BMP)"}, {"txt", "Text (TXT)"},    {"log", "Text (LOG)"},
-      {"csv", "Text (CSV)"},    {"html", "Web (HTML)"}, {"css", "Web (CSS)"},     {"js", "Web (JS)"},
-      {"json", "Data (JSON)"},  {"xml", "Data (XML)"},  {"zip", "Archive (ZIP)"}, {"gz", "Archive (GZ)"},
-      {"tar", "Archive (TAR)"}, {"mp4", "Video (MP4)"}, {"avi", "Video (AVI)"},   {"webm", "Video (WEBM)"}};
-
-  std::string ext = Path::extension(file);
-  if (ext.empty())
-    return "File";
-
-  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
-  auto it = file_types.find(ext);
-  if (it != file_types.end())
-    return it->second;
-  return "File (" + ext + ")";
-}
-
-std::string Path::mime_type(std::string const &file) {
-  static const std::map<std::string, std::string> file_types = {
-      {"mp3", "audio/mpeg"},        {"wav", "audio/vnd.wav"},   {"png", "image/png"},       {"jpg", "image/jpeg"},
-      {"jpeg", "image/jpeg"},       {"bmp", "image/bmp"},       {"txt", "text/plain"},      {"log", "text/plain"},
-      {"csv", "text/csv"},          {"html", "text/html"},      {"css", "text/css"},        {"js", "text/javascript"},
-      {"json", "application/json"}, {"xml", "application/xml"}, {"zip", "application/zip"}, {"gz", "application/gzip"},
-      {"tar", "application/x-tar"}, {"mp4", "video/mp4"},       {"avi", "video/x-msvideo"}, {"webm", "video/webm"}};
-
-  std::string ext = Path::extension(file);
-  ESP_LOGD(TAG, "ext : %s", ext.c_str());
-  if (!ext.empty()) {
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
-    auto it = file_types.find(ext);
-    if (it != file_types.end())
-      return it->second;
-  }
-  return "application/octet-stream";
-}
-
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
