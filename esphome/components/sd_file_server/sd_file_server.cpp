@@ -76,7 +76,9 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     use_chunked_mode = (request->contentLength() > 40 * 1024);
 
     if (!use_chunked_mode) {
-      upload_file = this->sd_mmc_card_->append_file(path.c_str(), "wb");
+      // upload_file = this->sd_mmc_card_->append_file(path.c_str(), "wb"); //OLD CODE
+      // NEW CODE
+      upload_file = fopen(path.c_str(), "wb");
       if (upload_file == nullptr) {
         request->send(500, "text/plain", "Failed to create file");
         return;
@@ -474,47 +476,6 @@ std::string Path::join(std::string const &first, std::string const &second) {
   return result;
 }
 
-std::string Path::file_type(std::string const &path) {
-  size_t pos = path.rfind('.');
-  if (pos == std::string::npos) {
-    return "";
-  }
-  return path.substr(pos + 1);
-}
-
-std::string Path::mime_type(std::string const &path) {
-  std::string type = file_type(path);
-  if (type == "html" || type == "htm")
-    return "text/html";
-  if (type == "css")
-    return "text/css";
-  if (type == "js")
-    return "application/javascript";
-  if (type == "json")
-    return "application/json";
-  if (type == "png")
-    return "image/png";
-  if (type == "jpg" || type == "jpeg")
-    return "image/jpeg";
-  if (type == "gif")
-    return "image/gif";
-  if (type == "svg")
-    return "image/svg+xml";
-  if (type == "ico")
-    return "image/x-icon";
-  if (type == "woff")
-    return "font/woff";
-  if (type == "woff2")
-    return "font/woff2";
-  if (type == "ttf")
-    return "font/ttf";
-  if (type == "eot")
-    return "font/eot";
-  if (type == "otf")
-    return "font/otf";
-  return "application/octet-stream";
-}
-
 std::string Path::remove_root_path(std::string path, std::string const &root) {
   if (!str_startswith(path, root))
     return path;
@@ -535,8 +496,16 @@ std::vector<std::string> Path::split_path(std::string path) {
   return parts;
 }
 
+std::string Path::extension(std::string const &);
+
+std::string Path::file_type(std::string const &);
+
+std::string Path::mime_type(std::string const &);
+};
+
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
