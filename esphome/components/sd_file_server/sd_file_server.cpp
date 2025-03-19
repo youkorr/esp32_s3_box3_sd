@@ -85,19 +85,19 @@ SDFileServer::SDFileServer(SdMmc *sd_mmc_card) : sd_mmc_card_(sd_mmc_card) {
 
 void SDFileServer::setup() {
   this->web_server_->on(this->base_path_.c_str(), HTTP_GET, [this](AsyncWebServerRequest *request) {
-    this->handleRequest(request);
+    this->handle_request(request);
   });
 
   this->web_server_->on(
       this->base_path_.c_str(), HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
       [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        this->handleUpload(request, data, len, index, total);
+        this->handle_upload(request, data, len, index, total);
       });
 
   ESP_LOGI(TAG, "SD File Server setup on %s", this->base_path_.c_str());
 }
 
-void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
+void SDFileServer::handle_request(AsyncWebServerRequest *request) {
   if (!this->sd_mmc_card_->is_mounted()) {
     request->send(500, "application/json", "{ \"error\": \"SD card not mounted\" }");
     return;
@@ -109,29 +109,29 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   }
 
   if (path.empty() || path == "/") {
-    this->handleDirectoryListing(request, "/");
+    this->handle_directory_listing(request, "/");
     return;
   }
 
   if (request->hasParam("download")) {
-    this->handleDownload(request, path);
+    this->handle_download(request, path);
     return;
   }
 
   if (request->hasParam("delete")) {
-    this->handleDelete(request, path);
+    this->handle_delete(request, path);
     return;
   }
 
   if (this->sd_mmc_card_->is_directory(path)) {
-    this->handleDirectoryListing(request, path);
+    this->handle_directory_listing(request, path);
     return;
   }
 
-  this->handleDownload(request, path);
+  this->handle_download(request, path);
 }
 
-void SDFileServer::handleDirectoryListing(AsyncWebServerRequest *request, std::string const &path) const {
+void SDFileServer::handle_directory_listing(AsyncWebServerRequest *request, std::string const &path) const {
   std::vector<std::string> directories;
   std::vector<std::string> files;
 
@@ -194,7 +194,7 @@ void SDFileServer::handleDirectoryListing(AsyncWebServerRequest *request, std::s
   request->send(200, "text/html", response.c_str());
 }
 
-void SDFileServer::handleDownload(AsyncWebServerRequest *request, std::string const &path) const {
+void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
@@ -236,7 +236,7 @@ void SDFileServer::handleDownload(AsyncWebServerRequest *request, std::string co
   request->send(response);
 }
 
-void SDFileServer::handleUpload(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
+void SDFileServer::handle_upload(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
                                  size_t total) {
   if (!this->upload_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
@@ -301,7 +301,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, uint8_t *data, s
   }
 }
 
-void SDFileServer::handleDelete(AsyncWebServerRequest *request) {
+void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
   if (!this->delete_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
