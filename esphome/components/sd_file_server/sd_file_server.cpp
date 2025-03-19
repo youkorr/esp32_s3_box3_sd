@@ -35,7 +35,7 @@ bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   // Redirige toutes les requêtes vers FileBrowser
-  request->redirect("http://192.168.1.60/files");
+  request->redirect("http://192.168.1.63/files");
 }
 
 // Implémentation de la méthode manquante qui cause l'erreur de liaison
