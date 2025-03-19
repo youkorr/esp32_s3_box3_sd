@@ -10,8 +10,8 @@ namespace sd_mmc_card {
 
 static const char *TAG = "sd_mmc_card";
 
-bool SdMmc::exists(const std::string& path) {
-  FILE* file = fopen(path.c_str(), "rb");
+bool SdMmc::exists(const std::string &path) {
+  FILE *file = fopen(path.c_str(), "rb");
   if (file != nullptr) {
     fclose(file);
     return true;
@@ -19,16 +19,14 @@ bool SdMmc::exists(const std::string& path) {
   return false;
 }
 
-size_t SdMmc::get_file_size(const std::string& path) {
-  FILE* file = fopen(path.c_str(), "rb");
+size_t SdMmc::get_file_size(const std::string &path) {
+  FILE *file = fopen(path.c_str(), "rb");
   if (file == nullptr) {
     return 0;
   }
-  
   fseek(file, 0, SEEK_END);
   size_t size = ftell(file);
   fclose(file);
-  
   return size;
 }
 
