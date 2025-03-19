@@ -125,6 +125,10 @@ class SdMmc : public Component {
   static std::string error_code_to_string(ErrorCode);
 };
 
+// Déclarations globales
+std::string build_path(const char *path);
+extern const char *TAG;
+
 template<typename... Ts> class SdMmcWriteFileAction : public Action<Ts...> {
  public:
   SdMmcWriteFileAction(SdMmc *parent) : parent_(parent) {}
