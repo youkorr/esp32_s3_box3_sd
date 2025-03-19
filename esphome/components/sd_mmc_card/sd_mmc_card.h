@@ -66,9 +66,6 @@ class SdMmc : public Component {
   bool remove_directory(const char *path);
   bool exists(const std::string &path);
   size_t get_file_size(const std::string &path);
-  void setup() override;
-  void loop() override;
-  void dump_config() override;
   std::vector<uint8_t> read_file(char const *path);
   std::vector<uint8_t> read_file(std::string const &path);
   bool is_directory(const char *path);
