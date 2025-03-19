@@ -4,10 +4,6 @@
 #include "esphome/core/helpers.h"
 
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(81); 
-AsyncWebSocket ws("/ws");
-
 namespace esphome {
 namespace sd_file_server {
 
