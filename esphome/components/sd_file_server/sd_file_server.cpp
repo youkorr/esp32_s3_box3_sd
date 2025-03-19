@@ -425,7 +425,7 @@ std::string Path::extension(std::string const &file) {
 
 std::string Path::file_type(std::string const &file) {
   static const std::map<std::string, std::string> file_types = {
-      {"mp3", "Audio (MP3)"},   {"wav", "Audio (WAV)"}, {"flac", "Audio (FLAC)"}, {"png", "Image (PNG)"},   {"jpg", "Image (JPG)"},
+      {"mp3", "Audio (MP3)"},   {"wav", "Audio (WAV)"}, {"png", "Image (PNG)"},   {"jpg", "Image (JPG)"},
       {"jpeg", "Image (JPEG)"}, {"bmp", "Image (BMP)"}, {"txt", "Text (TXT)"},    {"log", "Text (LOG)"},
       {"csv", "Text (CSV)"},    {"html", "Web (HTML)"}, {"css", "Web (CSS)"},     {"js", "Web (JS)"},
       {"json", "Data (JSON)"},  {"xml", "Data (XML)"},  {"zip", "Archive (ZIP)"}, {"gz", "Archive (GZ)"},
@@ -444,7 +444,7 @@ std::string Path::file_type(std::string const &file) {
 
 std::string Path::mime_type(std::string const &file) {
   static const std::map<std::string, std::string> file_types = {
-      {"mp3", "audio/mpeg"},        {"wav", "audio/vnd.wav"},   {"flac", "audio/vnd.flac"}, {"png", "image/png"},   {"jpg", "image/jpeg"},
+      {"mp3", "audio/mpeg"},        {"wav", "audio/vnd.wav"},   {"png", "image/png"},       {"jpg", "image/jpeg"},
       {"jpeg", "image/jpeg"},       {"bmp", "image/bmp"},       {"txt", "text/plain"},      {"log", "text/plain"},
       {"csv", "text/csv"},          {"html", "text/html"},      {"css", "text/css"},        {"js", "text/javascript"},
       {"json", "application/json"}, {"xml", "application/xml"}, {"zip", "application/zip"}, {"gz", "application/gzip"},
