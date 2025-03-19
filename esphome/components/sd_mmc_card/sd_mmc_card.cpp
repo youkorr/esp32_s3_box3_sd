@@ -7,7 +7,7 @@
 namespace esphome {
 namespace sd_mmc_card {
 
-const char *TAG = "sd_mmc_card"; // Définir TAG ici
+const char *TAG = "sd_mmc_card";
 
 #ifdef USE_SENSOR
 FileSizeSensor::FileSizeSensor(sensor::Sensor *sensor, std::string const &path) : sensor(sensor), path(path) {}
