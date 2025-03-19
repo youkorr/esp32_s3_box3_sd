@@ -3,7 +3,6 @@
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
 
-
 namespace esphome {
 namespace sd_file_server {
 
