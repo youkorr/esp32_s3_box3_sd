@@ -1,4 +1,5 @@
 #pragma once
+
 #include "esphome/core/gpio.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/component.h"
@@ -13,6 +14,10 @@
 #ifdef USE_ESP_IDF
 #include "sdmmc_cmd.h"
 #endif
+
+#include <functional>
+#include <vector>
+#include <string>
 
 namespace esphome {
 namespace sd_mmc_card {
@@ -72,6 +77,13 @@ class SdMmc : public Component {
   std::vector<FileInfo> list_directory_file_info(std::string path, uint8_t depth);
   size_t file_size(const char *path);
   size_t file_size(std::string const &path);
+
+  // Nouvelles méthodes pour la lecture/écriture par morceaux
+  bool write_file_chunked(const char *path, size_t chunk_size,
+                          std::function<std::vector<uint8_t>(size_t)> data_provider);
+  bool read_file_chunked(const char *path, size_t chunk_size,
+                         std::function<void(const std::vector<uint8_t> &)> data_consumer);
+
 #ifdef USE_SENSOR
   void add_file_size_sensor(sensor::Sensor *, std::string const &path);
 #endif
@@ -123,64 +135,6 @@ template<typename... Ts> class SdMmcWriteFileAction : public Action<Ts...> {
     auto path = this->path_.value(x...);
     auto buffer = this->data_.value(x...);
     this->parent_->write_file(path.c_str(), buffer.data(), buffer.size());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcAppendFileAction : public Action<Ts...> {
- public:
-  SdMmcAppendFileAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-  TEMPLATABLE_VALUE(std::vector<uint8_t>, data)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    auto buffer = this->data_.value(x...);
-    this->parent_->append_file(path.c_str(), buffer.data(), buffer.size());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcCreateDirectoryAction : public Action<Ts...> {
- public:
-  SdMmcCreateDirectoryAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    this->parent_->create_directory(path.c_str());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcRemoveDirectoryAction : public Action<Ts...> {
- public:
-  SdMmcRemoveDirectoryAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    this->parent_->remove_directory(path.c_str());
-  }
-
- protected:
-  SdMmc *parent_;
-};
-
-template<typename... Ts> class SdMmcDeleteFileAction : public Action<Ts...> {
- public:
-  SdMmcDeleteFileAction(SdMmc *parent) : parent_(parent) {}
-  TEMPLATABLE_VALUE(std::string, path)
-
-  void play(Ts... x) {
-    auto path = this->path_.value(x...);
-    this->parent_->delete_file(path.c_str());
   }
 
  protected:
