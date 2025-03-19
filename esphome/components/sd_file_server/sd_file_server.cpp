@@ -4,8 +4,6 @@
 #include "esphome/components/network/util.h"
 #include "esphome/core/helpers.h"
 
-
-
 namespace esphome {
 namespace sd_file_server {
 
@@ -23,11 +21,10 @@ private:
 
 public:
   ChunkedFileResponse(const std::string& path, const std::string& mime_type, size_t chunk_size = 8192)
-      : path_(path), file_(nullptr), file_size_(0), position_(0), chunk_size_(chunk_size), 
-        mime_type_(mime_type) {
+      : AsyncWebServerResponse(nullptr), path_(path), file_(nullptr), file_size_(0), position_(0), 
+        chunk_size_(chunk_size), mime_type_(mime_type) {
     buffer_ = new uint8_t[chunk_size_];
     
-    // Ouvrir le fichier et obtenir sa taille
     file_ = fopen(path_.c_str(), "rb");
     if (file_ != nullptr) {
       fseek(file_, 0, SEEK_END);
@@ -36,14 +33,13 @@ public:
       
       ESP_LOGI(TAG, "Preparing chunked download: %s (%zu bytes)", path_.c_str(), file_size_);
       
-      _contentType = mime_type_;
-      _contentLength = file_size_;
-      _code = 200;
-      _sendContentLength = true;
-      _chunked = true;
+      this->setContentType(mime_type_.c_str());
+      this->setCode(200);
+      this->setContentLength(file_size_);
+      this->setChunked(true);
     } else {
       ESP_LOGE(TAG, "Failed to open file for reading: %s", path_.c_str());
-      _code = 404;
+      this->setCode(404);
     }
   }
   
@@ -54,13 +50,12 @@ public:
     delete[] buffer_;
   }
   
-  bool _sourceValid() const override {
-    return (file_ != nullptr);
+  const char* get_content_data() const override {
+    return nullptr;
   }
   
-  void _respond(AsyncWebServerRequest* request) override {
-    ESP_LOGI(TAG, "Starting chunked file download: %s", path_.c_str());
-    AsyncWebServerResponse::_respond(request);
+  size_t get_content_size() const override {
+    return file_size_;
   }
   
   size_t _fillBuffer(uint8_t* data, size_t len) override {
@@ -90,19 +85,19 @@ SDFileServer::SDFileServer(SdMmc *sd_mmc_card) : sd_mmc_card_(sd_mmc_card) {
 
 void SDFileServer::setup() {
   this->web_server_->on(this->base_path_.c_str(), HTTP_GET, [this](AsyncWebServerRequest *request) {
-    this->handle_request(request);
+    this->handleRequest(request);
   });
 
   this->web_server_->on(
       this->base_path_.c_str(), HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
       [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        this->handle_upload(request, data, len, index, total);
+        this->handleUpload(request, data, len, index, total);
       });
 
   ESP_LOGI(TAG, "SD File Server setup on %s", this->base_path_.c_str());
 }
 
-void SDFileServer::handle_request(AsyncWebServerRequest *request) {
+void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
   if (!this->sd_mmc_card_->is_mounted()) {
     request->send(500, "application/json", "{ \"error\": \"SD card not mounted\" }");
     return;
@@ -114,29 +109,29 @@ void SDFileServer::handle_request(AsyncWebServerRequest *request) {
   }
 
   if (path.empty() || path == "/") {
-    this->handle_directory_listing(request, "/");
+    this->handleDirectoryListing(request, "/");
     return;
   }
 
   if (request->hasParam("download")) {
-    this->handle_download(request, path);
+    this->handleDownload(request, path);
     return;
   }
 
   if (request->hasParam("delete")) {
-    this->handle_delete(request, path);
+    this->handleDelete(request, path);
     return;
   }
 
   if (this->sd_mmc_card_->is_directory(path)) {
-    this->handle_directory_listing(request, path);
+    this->handleDirectoryListing(request, path);
     return;
   }
 
-  this->handle_download(request, path);
+  this->handleDownload(request, path);
 }
 
-void SDFileServer::handle_directory_listing(AsyncWebServerRequest *request, std::string const &path) const {
+void SDFileServer::handleDirectoryListing(AsyncWebServerRequest *request, std::string const &path) const {
   std::vector<std::string> directories;
   std::vector<std::string> files;
 
@@ -199,19 +194,17 @@ void SDFileServer::handle_directory_listing(AsyncWebServerRequest *request, std:
   request->send(200, "text/html", response.c_str());
 }
 
-void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
+void SDFileServer::handleDownload(AsyncWebServerRequest *request, std::string const &path) const {
   if (!this->download_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
     return;
   }
   
-  // Vérifier que le fichier existe
   if (!this->sd_mmc_card_->exists(path)) {
     request->send(404, "application/json", "{ \"error\": \"file not found\" }");
     return;
   }
   
-  // Pour les petits fichiers (< 16KB), utilisez la méthode existante pour des performances optimales
   size_t file_size = this->sd_mmc_card_->get_file_size(path);
   if (file_size < 16 * 1024) {
     auto file = this->sd_mmc_card_->read_file(path);
@@ -229,27 +222,21 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
   
-  // Pour les fichiers volumineux, utilisez le téléchargement par chunks
-  ESP_LOGI(TAG, "Using chunked download for large file: %s (%zu bytes)", path.c_str(), file_size);
-  
-  // Définir une taille de chunk raisonnable (8KB est un bon compromis)
   const size_t chunk_size = 8 * 1024;
   
-  // Créer et envoyer la réponse par chunks
   auto *response = new ChunkedFileResponse(path, Path::mime_type(path), chunk_size);
-  if (!response->_sourceValid()) {
+  if (response->get_content_size() == 0) {
     delete response;
     request->send(500, "application/json", "{ \"error\": \"failed to prepare file for download\" }");
     return;
   }
   
-  // Ajouter des en-têtes utiles
   response->addHeader("Content-Disposition", "attachment; filename=\"" + Path::file_name(path) + "\"");
   
   request->send(response);
 }
 
-void SDFileServer::handle_upload(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
+void SDFileServer::handleUpload(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index,
                                  size_t total) {
   if (!this->upload_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
@@ -265,7 +252,6 @@ void SDFileServer::handle_upload(AsyncWebServerRequest *request, uint8_t *data, 
   static std::string upload_path;
 
   if (index == 0) {
-    // Start of upload, open the file
     if (file) {
       fclose(file);
       file = nullptr;
@@ -292,7 +278,6 @@ void SDFileServer::handle_upload(AsyncWebServerRequest *request, uint8_t *data, 
   }
 
   if (file) {
-    // Write data to file
     if (len > 0) {
       size_t written = fwrite(data, 1, len, file);
       if (written != len) {
@@ -305,20 +290,18 @@ void SDFileServer::handle_upload(AsyncWebServerRequest *request, uint8_t *data, 
       }
     }
 
-    // End of upload, close the file
     if (index + len == total) {
       fclose(file);
       file = nullptr;
       ESP_LOGI(TAG, "File upload complete: %s (%zu bytes)", upload_path.c_str(), total);
 
-      // Redirect back to the directory
       std::string redirect = this->base_path_ + Path::parent_path(upload_path);
       request->redirect(redirect.c_str());
     }
   }
 }
 
-void SDFileServer::handle_delete(AsyncWebServerRequest *request, std::string const &path) const {
+void SDFileServer::handleDelete(AsyncWebServerRequest *request) {
   if (!this->delete_enabled_) {
     request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
@@ -329,10 +312,14 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request, std::string con
     return;
   }
 
+  std::string path = request->url().c_str();
+  if (path.find(this->base_path_) == 0) {
+    path = path.substr(this->base_path_.length());
+  }
+
   ESP_LOGI(TAG, "Deleting file: %s", path.c_str());
 
   if (this->sd_mmc_card_->remove_file(path)) {
-    // Redirect back to the parent directory
     std::string redirect = this->base_path_ + Path::parent_path(path);
     request->redirect(redirect.c_str());
   } else {
