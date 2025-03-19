@@ -1,5 +1,4 @@
 #pragma once
-
 #include "esphome/core/component.h"
 #include "esphome/components/web_server_base/web_server_base.h"
 #include "../sd_mmc_card/sd_mmc_card.h"
@@ -7,19 +6,11 @@
 namespace esphome {
 namespace sd_file_server {
 
-#ifdef ESP32
-#include <SPIFFS.h>
-#include <SD_MMC.h>
-typedef fs::File File;
-#endif
-
 class SDFileServer : public Component, public AsyncWebHandler {
  public:
-  SDFileServer(web_server_base::WebServerBase *base);
-
+  SDFileServer(web_server_base::WebServerBase *);
   void setup() override;
   void dump_config() override;
-
   bool canHandle(AsyncWebServerRequest *request) override;
   void handleRequest(AsyncWebServerRequest *request) override;
   void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
@@ -36,11 +27,12 @@ class SDFileServer : public Component, public AsyncWebHandler {
  protected:
   web_server_base::WebServerBase *base_;
   sd_mmc_card::SdMmc *sd_mmc_card_;
+
   std::string url_prefix_;
   std::string root_path_;
-  bool deletion_enabled_ = false;
-  bool download_enabled_ = false;
-  bool upload_enabled_ = false;
+  bool deletion_enabled_;
+  bool download_enabled_;
+  bool upload_enabled_;
 
   std::string build_prefix() const;
   std::string extract_path_from_url(std::string const &) const;
@@ -64,9 +56,18 @@ struct Path {
   /* Does the path have a trailing slash? */
   static bool trailing_slash(std::string const &);
 
-  /* Join two paths */
+  /* Join two path */
   static std::string join(std::string const &, std::string const &);
+
   static std::string remove_root_path(std::string path, std::string const &root);
+
+  static std::vector<std::string> split_path(std::string path);
+
+  static std::string extension(std::string const &);
+
+  static std::string file_type(std::string const &);
+
+  static std::string mime_type(std::string const &);
 };
 
 }  // namespace sd_file_server
