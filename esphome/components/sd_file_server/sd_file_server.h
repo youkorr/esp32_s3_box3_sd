@@ -1,7 +1,8 @@
 #pragma once
+
 #include "esphome/core/component.h"
 #include "esphome/components/web_server_base/web_server_base.h"
-#include "../sd_mmc_card/sd_mmc_card.h"
+#include "esphome/components/sd_mmc_card/sd_mmc_card.h"
 
 namespace esphome {
 namespace sd_file_server {
