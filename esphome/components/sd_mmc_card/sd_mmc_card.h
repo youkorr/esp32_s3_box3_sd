@@ -17,6 +17,13 @@
 namespace esphome {
 namespace sd_mmc_card {
 
+public:
+  // Vérifie si un fichier ou répertoire existe
+  bool exists(const std::string& path);
+  
+  // Obtient la taille d'un fichier
+  size_t get_file_size(const std::string& path);
+
 enum MemoryUnits : short { Byte = 0, KiloByte = 1, MegaByte = 2, GigaByte = 3, TeraByte = 4, PetaByte = 5 };
 
 #ifdef USE_SENSOR
