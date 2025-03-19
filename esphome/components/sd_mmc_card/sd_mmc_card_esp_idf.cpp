@@ -48,9 +48,7 @@ void SdMmc::setup() {
   }
 #endif
 
-  // Enable internal pullups on enabled pins. The internal pullups
-  // are insufficient however, please make sure 10k external pullups are
-  // connected on the bus. This is for debug / example purpose only.
+  // Enable internal pullups on enabled pins.
   slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
   auto ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT.c_str(), &host, &slot_config, &mount_config, &this->card_);
@@ -75,16 +73,17 @@ void SdMmc::setup() {
 
 void SdMmc::write_file(const char *path, const uint8_t *buffer, size_t len, const char *mode) {
   std::string absolut_path = build_path(path);
-  FILE *file = NULL;
-  file = fopen(absolut_path.c_str(), mode);
-  if (file == NULL) {
-    ESP_LOGE(TAG, "Failed to open file for writing");
+  FILE *file = fopen(absolut_path.c_str(), mode);
+  if (file == nullptr) {
+    ESP_LOGE(TAG, "Failed to open file for writing: %s", strerror(errno));
     return;
   }
-  bool ok = fwrite(buffer, 1, len, file);
-  if (!ok) {
-    ESP_LOGE(TAG, "Failed to write to file");
+
+  size_t written = fwrite(buffer, 1, len, file);
+  if (written != len) {
+    ESP_LOGE(TAG, "Failed to write to file: wrote %zu of %zu bytes", written, len);
   }
+
   fclose(file);
   this->update_sensors();
 }
@@ -109,6 +108,7 @@ bool SdMmc::remove_directory(const char *path) {
   std::string absolut_path = build_path(path);
   if (remove(absolut_path.c_str()) != 0) {
     ESP_LOGE(TAG, "Failed to remove directory: %s", strerror(errno));
+    return false;
   }
   this->update_sensors();
   return true;
@@ -123,6 +123,7 @@ bool SdMmc::delete_file(const char *path) {
   std::string absolut_path = build_path(path);
   if (remove(absolut_path.c_str()) != 0) {
     ESP_LOGE(TAG, "Failed to remove file: %s", strerror(errno));
+    return false;
   }
   this->update_sensors();
   return true;
@@ -132,28 +133,34 @@ std::vector<uint8_t> SdMmc::read_file(char const *path) {
   ESP_LOGV(TAG, "Read File: %s", path);
 
   std::string absolut_path = build_path(path);
-  FILE *file = nullptr;
-  file = fopen(absolut_path.c_str(), "rb");
+  FILE *file = fopen(absolut_path.c_str(), "rb");
   if (file == nullptr) {
-    ESP_LOGE(TAG, "Failed to open file for reading");
-    return std::vector<uint8_t>();
+    ESP_LOGE(TAG, "Failed to open file for reading: %s", strerror(errno));
+    return {};
   }
 
+  // Utiliser un tampon plus grand pour réduire les appels à fread
+  const size_t buffer_size = 4096; // 4 Ko
   std::vector<uint8_t> res;
-  size_t fileSize = this->file_size(path);
-  res.resize(fileSize);
-  size_t len = fread(res.data(), 1, fileSize, file);
-  fclose(file);
-  if (len < 0) {
-    ESP_LOGE(TAG, "Failed to read file: %s", strerror(errno));
-    return std::vector<uint8_t>();
+  std::vector<uint8_t> buffer(buffer_size);
+  size_t total_read = 0;
+
+  while (size_t bytes_read = fread(buffer.data(), 1, buffer_size, file)) {
+    res.insert(res.end(), buffer.data(), buffer.data() + bytes_read);
+    total_read += bytes_read;
+
+    if (total_read % 4096 == 0) {
+      ESP_LOGV(TAG, "Read progress: %zu bytes", total_read);
+      yield(); // Permettre aux autres tâches de s'exécuter
+    }
   }
 
+  fclose(file);
   return res;
 }
 
-std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth,
-                                                           std::vector<FileInfo> &list) {
+std::vector<SdMmc::FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uint8_t depth,
+                                                                  std::vector<FileInfo> &list) {
   ESP_LOGV(TAG, "Listing directory file info: %s\n", path);
   std::string absolut_path = build_path(path);
   DIR *dir = opendir(absolut_path.c_str());
@@ -161,32 +168,47 @@ std::vector<FileInfo> &SdMmc::list_directory_file_info_rec(const char *path, uin
     ESP_LOGE(TAG, "Failed to open directory: %s", strerror(errno));
     return list;
   }
+
+  // Pré-allouer les buffers
   char entry_absolut_path[FILE_PATH_MAX];
   char entry_path[FILE_PATH_MAX];
-  const size_t dirpath_len = MOUNT_POINT.size();
-  size_t entry_path_len = strlen(path);
   strlcpy(entry_path, path, sizeof(entry_path));
-  strlcpy(entry_path + entry_path_len, "/", sizeof(entry_path) - entry_path_len);
-  entry_path_len = strlen(entry_path);
+  size_t entry_path_len = strlen(entry_path);
 
-  strlcpy(entry_absolut_path, MOUNT_POINT.c_str(), sizeof(entry_absolut_path));
+  // Ajouter un slash à la fin si nécessaire
+  if (entry_path_len > 0 && entry_path[entry_path_len - 1] != '/') {
+    entry_path[entry_path_len++] = '/';
+    entry_path[entry_path_len] = '\0';
+  }
+
   struct dirent *entry;
   while ((entry = readdir(dir)) != nullptr) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+
+    // Construire les chemins
+    snprintf(entry_path + entry_path_len, sizeof(entry_path) - entry_path_len, "%s", entry->d_name);
+    snprintf(entry_absolut_path, sizeof(entry_absolut_path), "%s/%s", MOUNT_POINT.c_str(), entry_path);
+
     size_t file_size = 0;
-    strlcpy(entry_path + entry_path_len, entry->d_name, sizeof(entry_path) - entry_path_len);
-    strlcpy(entry_absolut_path + dirpath_len, entry_path, sizeof(entry_absolut_path) - dirpath_len);
     if (entry->d_type != DT_DIR) {
       struct stat info;
       if (stat(entry_absolut_path, &info) < 0) {
-        ESP_LOGE(TAG, "Failed to stat file: %s '%s' %s", strerror(errno), entry->d_name, entry_absolut_path);
+        ESP_LOGE(TAG, "Failed to stat file: %s", strerror(errno));
       } else {
         file_size = info.st_size;
       }
     }
+
     list.emplace_back(entry_path, file_size, entry->d_type == DT_DIR);
-    if (entry->d_type == DT_DIR && depth)
-      list_directory_file_info_rec(entry_absolut_path, depth - 1, list);
+
+    // Récursion pour les sous-répertoires
+    if (entry->d_type == DT_DIR && depth > 0) {
+      list_directory_file_info_rec(entry_path, depth - 1, list);
+    }
   }
+
   closedir(dir);
   return list;
 }
@@ -196,17 +218,17 @@ bool SdMmc::is_directory(const char *path) {
   DIR *dir = opendir(absolut_path.c_str());
   if (dir) {
     closedir(dir);
+    return true;
   }
-  return dir != nullptr;
+  return false;
 }
 
 size_t SdMmc::file_size(const char *path) {
   std::string absolut_path = build_path(path);
   struct stat info;
-  size_t file_size = 0;
   if (stat(absolut_path.c_str(), &info) < 0) {
     ESP_LOGE(TAG, "Failed to stat file: %s", strerror(errno));
-    return -1;
+    return static_cast<size_t>(-1);
   }
   return info.st_size;
 }
