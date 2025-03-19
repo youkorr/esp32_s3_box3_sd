@@ -1,76 +1,53 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/core/hal.h"
+#include "esphome/core/http.h"
 #include "esphome/components/web_server_base/web_server_base.h"
-#include "../sd_mmc_card/sd_mmc_card.h"
+#include "esphome/components/sd_mmc_card/sd_mmc_card.h" // Include SdMmc
+#include
 
 namespace esphome {
 namespace sd_file_server {
 
-#ifdef ESP32
-#include <SPIFFS.h>
-#include <SD_MMC.h>
-typedef fs::File File;
-#endif
-
-class SDFileServer : public Component, public AsyncWebHandler {
- public:
-  SDFileServer(web_server_base::WebServerBase *base);
-
-  void setup() override;
-  void dump_config() override;
-
-  bool canHandle(AsyncWebServerRequest *request) override;
-  void handleRequest(AsyncWebServerRequest *request) override;
-  void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len,
-                    bool final) override;
-  bool isRequestHandlerTrivial() override { return false; }
-
-  void set_url_prefix(std::string const &);
-  void set_root_path(std::string const &);
-  void set_sd_mmc_card(sd_mmc_card::SdMmc *);
-  void set_deletion_enabled(bool);
-  void set_download_enabled(bool);
-  void set_upload_enabled(bool);
-
- protected:
-  web_server_base::WebServerBase *base_;
-  sd_mmc_card::SdMmc *sd_mmc_card_;
-  std::string url_prefix_;
-  std::string root_path_;
-  bool deletion_enabled_ = false;
-  bool download_enabled_ = false;
-  bool upload_enabled_ = false;
-
-  std::string build_prefix() const;
-  std::string extract_path_from_url(std::string const &) const;
-  std::string build_absolute_path(std::string) const;
-  void write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const;
-  void handle_index(AsyncWebServerRequest *, std::string const &) const;
-  void handle_get(AsyncWebServerRequest *) const;
-  void handle_delete(AsyncWebServerRequest *);
-  void handle_download(AsyncWebServerRequest *, std::string const &) const;
-};
-
 struct Path {
   static constexpr char separator = '/';
 
-  /* Return the name of the file */
-  static std::string file_name(std::string const &);
-
-  /* Is the path an absolute path? */
-  static bool is_absolute(std::string const &);
-
-  /* Does the path have a trailing slash? */
-  static bool trailing_slash(std::string const &);
-
-  /* Join two paths */
-  static std::string join(std::string const &, std::string const &);
+  static std::string file_name(std::string const &path);
+  static bool is_absolute(std::string const &path);
+  static bool trailing_slash(std::string const &path);
+  static std::string join(std::string const &first, std::string const &second);
   static std::string remove_root_path(std::string path, std::string const &root);
+};
+
+class SDFileServer : public Component, public web_server_base::AsyncWebHandler {
+ public:
+  SDFileServer(web_server_base::WebServerBase *base);
+  SDFileServer(web_server_base::WebServerBase *base, sd_mmc_card::SdMmc *sd_mmc); // Add constructor
+
+  void setup() override;
+  void dump_config() override;
+  void set_url_prefix(const std::string &url_prefix);
+
+  void set_sd_mmc(sd_mmc_card::SdMmc *sd_mmc); // Add set_sd_mmc
+
+  // Implementation of AsyncWebHandler
+  bool canHandle(AsyncWebServerRequest *request) override;
+  void handle_web_request(AsyncWebServerRequest *request) override;
+
+ protected:
+  virtual void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final);
+  virtual void handleDownload(AsyncWebServerRequest *request);
+
+  web_server_base::WebServerBase *base_{nullptr};
+  sd_mmc_card::SdMmc *sd_mmc_{nullptr}; // Add SdMmc member
+
+  std::string url_prefix_{};
 };
 
 }  // namespace sd_file_server
 }  // namespace esphome
+
 
 
 
