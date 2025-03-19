@@ -30,6 +30,7 @@ std::string get_file_type(const std::string &filename) {
   static const std::map<std::string, std::string> file_types = {
     {"mp3", "Audio (MP3)"},
     {"wav", "Audio (WAV)"},
+    {"flac", "Audio (FLAC)"},
     {"png", "Image (PNG)"},
     {"jpg", "Image (JPG)"},
     {"jpeg", "Image (JPEG)"},
@@ -481,6 +482,8 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
       content_type = "audio/mpeg";
     } else if (ext == "wav") {
       content_type = "audio/wav";
+    } else if (ext == "flac") {
+      content_type = "audio/flac";   
     }
   }
 
