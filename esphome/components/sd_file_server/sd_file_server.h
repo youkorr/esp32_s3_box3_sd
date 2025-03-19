@@ -42,6 +42,9 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void handle_get(AsyncWebServerRequest *) const;
   void handle_delete(AsyncWebServerRequest *);
   void handle_download(AsyncWebServerRequest *, std::string const &) const;
+
+  // Ajout de la déclaration de write_file_chunked
+  bool write_file_chunked(const std::string &path, const std::function<size_t(uint8_t*, size_t)> &data_provider, size_t chunk_size);
 };
 
 struct Path {
