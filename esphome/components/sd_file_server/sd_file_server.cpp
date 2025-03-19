@@ -69,7 +69,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     std::string dir = path.substr(0, path.find_last_of('/'));
     if (!this->sd_mmc_card_->is_directory(dir.c_str())) {
       ESP_LOGI(TAG, "Creating directory: %s", dir.c_str());
-      if (!this->sd_mmc_card_->make_directory(dir.c_str())) {
+      if (!this->sd_mmc_card_->create_directory(dir.c_str())) {
         request->send(500, "text/plain", "Failed to create directory");
         return;
       }
@@ -90,7 +90,7 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     
     if (!use_chunked_mode) {
       // Mode standard : ouvrir le fichier normalement
-      upload_file = this->sd_mmc_card_->open_file(path.c_str(), "wb");
+      upload_file = this->sd_mmc_card_->append_file(path.c_str(), "wb");
       if (upload_file == nullptr) {
         request->send(500, "text/plain", "Failed to create file");
         return;
