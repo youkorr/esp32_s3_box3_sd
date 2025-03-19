@@ -45,30 +45,131 @@ void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
 void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
                                 size_t len, bool final) {
   if (!this->upload_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
+    request->send(403, "text/plain", "Upload not allowed");
     return;
   }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
+  
+  if (this->sd_mmc_card_ == nullptr) {
+    request->send(500, "text/plain", "SD card not initialized");
+    return;
+  }
 
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
-  std::string file_name(filename.c_str());
+  static std::string upload_path;
+  static FILE *upload_file = nullptr;
+  static size_t total_size = 0;
+  static bool use_chunked_mode = false;
+  
+  // Première partie du fichier
   if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
-    return;
+    // Construire le chemin absolu
+    std::string path = extract_path_from_url(request->url().c_str());
+    path = build_absolute_path(path);
+    
+    // Si le répertoire de destination n'existe pas, essayer de le créer
+    std::string dir = path.substr(0, path.find_last_of('/'));
+    if (!this->sd_mmc_card_->is_directory(dir.c_str())) {
+      ESP_LOGI(TAG, "Creating directory: %s", dir.c_str());
+      if (!this->sd_mmc_card_->make_directory(dir.c_str())) {
+        request->send(500, "text/plain", "Failed to create directory");
+        return;
+      }
+    }
+    
+    upload_path = path;
+    total_size = 0;
+    
+    // Déterminer si on doit utiliser le mode par morceaux en fonction
+    // de la taille du fichier attendue (si connue dans les en-têtes)
+    use_chunked_mode = false;  // Par défaut en mode standard
+    
+    // Si l'en-tête Content-Length est présent et indique un fichier > 40Ko, utiliser le mode chunked
+    if (request->contentLength() > 40 * 1024) {
+      use_chunked_mode = true;
+      ESP_LOGI(TAG, "Large upload detected (%d bytes), using chunked mode", request->contentLength());
+    }
+    
+    if (!use_chunked_mode) {
+      // Mode standard : ouvrir le fichier normalement
+      upload_file = this->sd_mmc_card_->open_file(path.c_str(), "wb");
+      if (upload_file == nullptr) {
+        request->send(500, "text/plain", "Failed to create file");
+        return;
+      }
+    }
   }
-  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
+  
+  // Traitement des données
+  if (!use_chunked_mode) {
+    // Mode standard : écriture directe
+    if (upload_file != nullptr) {
+      size_t bytes_written = fwrite(data, 1, len, upload_file);
+      if (bytes_written != len) {
+        ESP_LOGE(TAG, "Write error");
+        fclose(upload_file);
+        upload_file = nullptr;
+        request->send(500, "text/plain", "Write error");
+        return;
+      }
+      total_size += bytes_written;
+    }
+  } else {
+    // Mode par morceaux : stocker temporairement dans un tampon et écrire si c'est la partie finale
+    static std::vector<uint8_t> current_chunk;
+    
+    // Ajouter les données actuelles au tampon
+    current_chunk.insert(current_chunk.end(), data, data + len);
+    total_size += len;
+    
+    // Si c'est la dernière partie ou si le tampon est trop grand, écrire maintenant
+    if (final || current_chunk.size() > 32 * 1024) {
+      if (final) {
+        ESP_LOGI(TAG, "Writing final chunk (%d bytes total)", total_size);
+      } else {
+        ESP_LOGD(TAG, "Writing intermediate chunk (%d bytes so far)", total_size);
+      }
+      
+      // Définir le callback de fournisseur de données
+      size_t chunk_pos = 0;
+      auto data_provider = [&](uint8_t* buffer, size_t max_len) -> size_t {
+        if (chunk_pos >= current_chunk.size()) {
+          return 0;  // Plus de données
+        }
+        
+        size_t remaining = current_chunk.size() - chunk_pos;
+        size_t bytes_to_copy = (remaining < max_len) ? remaining : max_len;
+        
+        memcpy(buffer, current_chunk.data() + chunk_pos, bytes_to_copy);
+        chunk_pos += bytes_to_copy;
+        
+        return bytes_to_copy;
+      };
+      
+      // Écrire les données
+      bool success = write_file_chunked(upload_path, data_provider, 4096);
+      
+      if (!success) {
+        request->send(500, "text/plain", "Write error in chunked mode");
+        return;
+      }
+      
+      // Vider le tampon
+      current_chunk.clear();
+    }
+  }
+  
+  // Partie finale du fichier
   if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
+    if (!use_chunked_mode && upload_file != nullptr) {
+      fclose(upload_file);
+      upload_file = nullptr;
+    }
+    
+    ESP_LOGI(TAG, "Upload complete: %s (%d bytes)", upload_path.c_str(), total_size);
+    
+    // Rediriger vers le répertoire parent
+    std::string redir = Path::join(url_prefix_, Path::remove_root_path(upload_path, root_path_));
+    redir = redir.substr(0, redir.find_last_of('/') + 1);
+    request->redirect(redir.c_str());
   }
 }
 
@@ -463,7 +564,6 @@ std::string Path::mime_type(std::string const &file) {
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
