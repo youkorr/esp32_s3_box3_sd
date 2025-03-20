@@ -2,6 +2,9 @@
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
 #include <esp_http_server.h>
+#include <esp_netif.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <map>
 #include <algorithm>
 #include <sstream>
@@ -43,7 +46,31 @@ void SDFileServer::setup() {
     this->mark_failed();
     return;
   }
-  this->start_server();
+  
+  // Wait for the network to be ready
+  ESP_LOGI(TAG, "Waiting for network to be ready...");
+  esp_netif_t *netif = nullptr;
+  while (netif == nullptr) {
+    netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif == nullptr) {
+      vTaskDelay(pdMS_TO_TICKS(1000));  // Wait for 1 second
+    }
+  }
+  ESP_LOGI(TAG, "Network is ready");
+
+  // Start the server in a new task
+  xTaskCreate(
+    [](void* param) {
+      SDFileServer* server = static_cast<SDFileServer*>(param);
+      server->start_server();
+      vTaskDelete(NULL);
+    },
+    "http_server",
+    8192,  // Increased stack size
+    this,
+    5,
+    NULL
+  );
 }
 
 void SDFileServer::loop() {
@@ -64,11 +91,12 @@ void SDFileServer::start_server() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = this->port_;
   config.uri_match_fn = httpd_uri_match_wildcard;
+  config.stack_size = 8192;  // Increased stack size
 
   ESP_LOGD(TAG, "Starting HTTP Server on port %d", config.server_port);
   esp_err_t err = httpd_start(&this->server_, &config);
   if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to start HTTP Server!");
+    ESP_LOGE(TAG, "Failed to start HTTP Server: %s", esp_err_to_name(err));
     this->mark_failed();
     return;
   }
@@ -322,7 +350,6 @@ std::string SDFileServer::build_absolute_path(const std::string &file_path) cons
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
