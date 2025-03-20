@@ -13,30 +13,25 @@ namespace sd_file_server {
 
 class SDFileServer : public Component {
 public:
-    // Constructeurs
     explicit SDFileServer(web_server_base::WebServerBase *base);
 #ifdef USE_ESP_IDF
     explicit SDFileServer(httpd_handle_t server);
 #endif
 
-    // Méthodes publiques
     void setup() override;
     void dump_config() override;
 
 #ifdef USE_ESP_IDF
-    // Gestionnaires statiques pour ESP-IDF
-    esp_err_t handle_get_static(httpd_req_t *req);
-    esp_err_t handle_delete_static(httpd_req_t *req);
-    esp_err_t handle_post_static(httpd_req_t *req);
+    static esp_err_t handle_get_static(httpd_req_t *req);
+    static esp_err_t handle_delete_static(httpd_req_t *req);
+    static esp_err_t handle_post_static(httpd_req_t *req);
 
-    // Implémentations pour ESP-IDF
     esp_err_t handle_get_idf(httpd_req_t *req);
     esp_err_t handle_delete_idf(httpd_req_t *req);
     esp_err_t handle_post_idf(httpd_req_t *req);
     esp_err_t handle_download_idf(httpd_req_t *req, const std::string &path) const;
     esp_err_t handle_index_idf(httpd_req_t *req, const std::string &path) const;
 #else
-    // Méthodes pour AsyncWebServer
     bool canHandle(AsyncWebServerRequest *request) override;
     void handleRequest(AsyncWebServerRequest *request) override;
     void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
@@ -44,7 +39,6 @@ public:
     bool isRequestHandlerTrivial() override { return false; }
 #endif
 
-    // Setters
     void set_url_prefix(const std::string &);
     void set_root_path(const std::string &);
     void set_sd_mmc_card(sd_mmc_card::SDMMCCard *);
@@ -54,9 +48,9 @@ public:
 
 protected:
 #ifdef USE_ESP_IDF
-    httpd_handle_t server_ = nullptr; // Serveur HTTP pour ESP-IDF
+    httpd_handle_t server_ = nullptr;
 #else
-    web_server_base::WebServerBase *base_; // Serveur Web pour AsyncWebServer
+    web_server_base::WebServerBase *base_ = nullptr;
 #endif
 
     sd_mmc_card::SDMMCCard *sd_mmc_card_ = nullptr;
@@ -67,7 +61,6 @@ protected:
     bool download_enabled_ = false;
     bool upload_enabled_ = false;
 
-    // Méthodes internes
     std::string build_prefix() const;
     std::string extract_path_from_url(const std::string &) const;
     std::string build_absolute_path(const std::string &) const;
@@ -77,7 +70,6 @@ protected:
     void handle_delete(AsyncWebServerRequest *);
     void handle_download(AsyncWebServerRequest *, const std::string &) const;
 
-    // Ajout de la déclaration de write_file_chunked
     bool write_file_chunked(const std::string &path, const std::function<size_t(uint8_t *, size_t)> &data_provider,
                             size_t chunk_size);
 };
@@ -85,31 +77,14 @@ protected:
 struct Path {
     static constexpr char separator = '/';
 
-    /* Retourne le nom du fichier */
     static std::string file_name(const std::string &);
-
-    /* Le chemin est-il absolu ? */
     static bool is_absolute(const std::string &);
-
-    /* Le chemin se termine-t-il par un slash ? */
     static bool trailing_slash(const std::string &);
-
-    /* Joindre deux chemins */
     static std::string join(const std::string &, const std::string &);
-
-    /* Supprimer le chemin racine d'un chemin donné */
-    static std::string remove_root_path(std::string path, const std::string &root);
-
-    /* Diviser un chemin en parties */
-    static std::vector<std::string> split_path(const std::string &path);
-
-    /* Récupérer l'extension d'un fichier */
+    static std::string remove_root_path(std::string, const std::string &);
+    static std::vector<std::string> split_path(const std::string &);
     static std::string extension(const std::string &);
-
-    /* Déterminer le type de fichier */
     static std::string file_type(const std::string &);
-
-    /* Récupérer le type MIME d'un fichier */
     static std::string mime_type(const std::string &);
 };
 
