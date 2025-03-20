@@ -2,7 +2,6 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/sd_mmc_card/sd_mmc_card.h"
-#include "esphome/components/web_server_base/web_server_base.h"
 #include <esp_http_server.h>
 
 namespace esphome {
@@ -11,7 +10,6 @@ namespace sd_file_server {
 class SDFileServer : public Component {
  public:
   SDFileServer();
-  SDFileServer(web_server_base::WebServerBase* base);  // Ajout de ce constructeur
 
   void setup() override;
   void loop() override;
@@ -27,7 +25,6 @@ class SDFileServer : public Component {
 
  protected:
   httpd_handle_t server_{nullptr};
-  web_server_base::WebServerBase* base_{nullptr};  // Ajout de ce membre
   sd_mmc_card::SdMmc *sd_mmc_card_{nullptr};
   uint16_t port_{80};
   std::string url_prefix_{"files"};
