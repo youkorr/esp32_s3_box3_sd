@@ -1,6 +1,7 @@
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
+#include <esp_http_server.h>
 #include <map>
 #include <algorithm>
 #include <sstream>
@@ -35,8 +36,6 @@ public:
 
 SDFileServer::SDFileServer() {}
 
-SDFileServer::SDFileServer(web_server_base::WebServerBase* base) : base_(base) {}
-
 void SDFileServer::setup() {
   ESP_LOGCONFIG(TAG, "Setting up SD File Server...");
   if (this->sd_mmc_card_ == nullptr) {
@@ -44,14 +43,7 @@ void SDFileServer::setup() {
     this->mark_failed();
     return;
   }
-  
-  if (this->base_ != nullptr) {
-    // Si nous avons un WebServerBase, nous l'utilisons
-    this->base_->add_handler(this);
-  } else {
-    // Sinon, nous démarrons notre propre serveur
-    this->start_server();
-  }
+  this->start_server();
 }
 
 void SDFileServer::loop() {
@@ -330,7 +322,6 @@ std::string SDFileServer::build_absolute_path(const std::string &file_path) cons
 
 }  // namespace sd_file_server
 }  // namespace esphome
-
 
 
 
