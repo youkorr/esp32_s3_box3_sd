@@ -41,7 +41,7 @@ public:
 
     void set_url_prefix(const std::string &);
     void set_root_path(const std::string &);
-    void set_sd_mmc_card(sd_mmc_card::SDMMCCard *);
+    void set_sd_mmc_card(sd_mmc_card::SdMmc *);
     void set_deletion_enabled(bool);
     void set_download_enabled(bool);
     void set_upload_enabled(bool);
@@ -53,7 +53,7 @@ protected:
     web_server_base::WebServerBase *base_ = nullptr;
 #endif
 
-    sd_mmc_card::SDMMCCard *sd_mmc_card_ = nullptr;
+    sd_mmc_card::SdMmc *sd_mmc_card_ = nullptr;
 
     std::string url_prefix_;
     std::string root_path_;
