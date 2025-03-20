@@ -1,6 +1,7 @@
 #include "sd_file_server.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
+#include "esphome/components/sd_mmc_card/sd_mmc_card.h"
 #include <esp_http_server.h>
 #include <map>
 #include <algorithm>
@@ -10,6 +11,29 @@ namespace esphome {
 namespace sd_file_server {
 
 static const char *const TAG = "sd_file_server";
+
+// Helper function to format file sizes
+std::string format_size(size_t size) {
+  const char* units[] = {"B", "KB", "MB", "GB"};
+  int unit = 0;
+  double size_d = static_cast<double>(size);
+  while (size_d >= 1024 && unit < 3) {
+    size_d /= 1024;
+    unit++;
+  }
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%.2f %s", size_d, units[unit]);
+  return std::string(buffer);
+}
+
+// Helper class for path operations
+class Path {
+public:
+  static std::string file_name(const std::string& path) {
+    size_t pos = path.find_last_of("/\\");
+    return (pos == std::string::npos) ? path : path.substr(pos + 1);
+  }
+};
 
 void SDFileServer::setup() {
   ESP_LOGCONFIG(TAG, "Setting up SD File Server...");
@@ -293,19 +317,6 @@ std::string SDFileServer::build_absolute_path(const std::string &file_path) cons
     path = "/" + path;
   }
   return this->root_path_ + path;
-}
-
-std::string format_size(size_t size) {
-  const char* units[] = {"B", "KB", "MB", "GB"};
-  int unit = 0;
-  double size_d = static_cast<double>(size);
-  while (size_d >= 1024 && unit < 3) {
-    size_d /= 1024;
-    unit++;
-  }
-  char buffer[32];
-  snprintf(buffer, sizeof(buffer), "%.2f %s", size_d, units[unit]);
-  return std::string(buffer);
 }
 
 }  // namespace sd_file_server
