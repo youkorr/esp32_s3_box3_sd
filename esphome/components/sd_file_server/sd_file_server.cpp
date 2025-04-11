@@ -23,34 +23,22 @@ void SDFileServer::dump_config() {
 }
 
 bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
-  if (request == nullptr || request->url().length() == 0) {
-    return false;
-  }
-  
-  std::string url = request->url().c_str();
-  bool can_handle = str_startswith(url, this->build_prefix());
-  ESP_LOGD(TAG, "can handle %s %u", url.c_str(), can_handle);
-  return can_handle;
+  ESP_LOGD(TAG, "can handle %s %u", request->url().c_str(),
+           str_startswith(std::string(request->url().c_str()), this->build_prefix()));
+  return str_startswith(std::string(request->url().c_str()), this->build_prefix());
 }
 
 void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  try {
-    ESP_LOGD(TAG, "Handling request: %s", request->url().c_str());
-    if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
-      if (request->method() == HTTP_GET) {
-        this->handle_get(request);
-        return;
-      }
-      if (request->method() == HTTP_DELETE) {
-        this->handle_delete(request);
-        return;
-      }
-      // Gérer les méthodes non supportées
-      request->send(405, "application/json", "{ \"error\": \"method not allowed\" }");
+  ESP_LOGD(TAG, "%s", request->url().c_str());
+  if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
+    if (request->method() == HTTP_GET) {
+      this->handle_get(request);
+      return;
     }
-  } catch (std::exception &e) {
-    ESP_LOGE(TAG, "Request handling error: %s", e.what());
-    request->send(500, "application/json", "{ \"error\": \"internal server error\" }");
+    if (request->method() == HTTP_DELETE) {
+      this->handle_delete(request);
+      return;
+    }
   }
 }
 
@@ -60,59 +48,27 @@ void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &fi
     request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
     return;
   }
-  
-  try {
-    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-    std::string path = this->build_absolute_path(extracted);
+  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+  std::string path = this->build_absolute_path(extracted);
 
-    // Vérifier si le répertoire existe
-    if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-      auto response = request->beginResponse(404, "application/json", "{ \"error\": \"upload directory not found\" }");
-      response->addHeader("Connection", "close");
-      request->send(response);
-      return;
-    }
-    
-    // Valider le nom de fichier
-    std::string file_name(filename.c_str());
-    if (file_name.empty() || file_name.find("/") != std::string::npos || file_name.find("\\") != std::string::npos) {
-      auto response = request->beginResponse(400, "application/json", "{ \"error\": \"invalid filename\" }");
-      response->addHeader("Connection", "close");
-      request->send(response);
-      return;
-    }
-    
-    std::string full_path = Path::join(path, file_name);
-    
-    if (index == 0) {
-      ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-      // Créer un nouveau fichier
-      if (!this->sd_mmc_card_->write_file(full_path.c_str(), data, len)) {
-        auto response = request->beginResponse(500, "application/json", "{ \"error\": \"failed to create file\" }");
-        response->addHeader("Connection", "close");
-        request->send(response);
-        return;
-      }
-    } else {
-      // Ajouter au fichier existant
-      if (!this->sd_mmc_card_->append_file(full_path.c_str(), data, len)) {
-        auto response = request->beginResponse(500, "application/json", "{ \"error\": \"failed to append to file\" }");
-        response->addHeader("Connection", "close");
-        request->send(response);
-        return;
-      }
-    }
-    
-    if (final) {
-      auto response = request->beginResponse(201, "application/json", "{ \"success\": true, \"file\": \"" + file_name + "\" }");
-      response->addHeader("Connection", "close");
-      request->send(response);
-    }
-  } catch (std::exception &e) {
-    ESP_LOGE(TAG, "Upload error: %s", e.what());
-    auto response = request->beginResponse(500, "application/json", "{ \"error\": \"internal server error\" }");
+  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
+    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
     response->addHeader("Connection", "close");
     request->send(response);
+    return;
+  }
+  std::string file_name(filename.c_str());
+  if (index == 0) {
+    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
+    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
+    return;
+  }
+  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
+  if (final) {
+    auto response = request->beginResponse(201, "text/html", "upload success");
+    response->addHeader("Connection", "close");
+    request->send(response);
+    return;
   }
 }
 
@@ -128,30 +84,16 @@ void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = 
 
 void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allow; }
 
-bool SDFileServer::file_exists(const std::string &path) const {
-  return this->sd_mmc_card_->is_file(path);
-}
-
 void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
-  try {
-    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-    std::string path = this->build_absolute_path(extracted);
+  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+  std::string path = this->build_absolute_path(extracted);
 
-    if (!this->sd_mmc_card_->exists(path)) {
-      request->send(404, "application/json", "{ \"error\": \"path not found\" }");
-      return;
-    }
-
-    if (!this->sd_mmc_card_->is_directory(path)) {
-      handle_download(request, path);
-      return;
-    }
-
-    handle_index(request, path);
-  } catch (std::exception &e) {
-    ESP_LOGE(TAG, "GET handling error: %s", e.what());
-    request->send(500, "application/json", "{ \"error\": \"internal server error\" }");
+  if (!this->sd_mmc_card_->is_directory(path)) {
+    handle_download(request, path);
+    return;
   }
+
+  handle_index(request, path);
 }
 
 void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
@@ -186,80 +128,40 @@ void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInf
 }
 
 void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
-  try {
-    AsyncResponseStream *response = request->beginResponseStream("text/html");
-    response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
-                      "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
-                      "<style>body{font-family:sans-serif}table{border-collapse:collapse;width:100%}"
-                      "th,td{border:1px solid #ddd;padding:8px}tr:nth-child(even){background-color:#f2f2f2}"
-                      "th{padding-top:12px;padding-bottom:12px;text-align:left;background-color:#4CAF50;color:white}"
-                      "button{margin:2px;padding:5px;background-color:#4CAF50;color:white;border:none;cursor:pointer}"
-                      "button:hover{background-color:#45a049}</style>"
-                      "</head><body>"
-                      "<h1>SD Card Content</h1><h2>Folder "));
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
+                    "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
+                    "</head><body>"
+                    "<h1>SD Card Content</h1><h2>Folder "));
 
-    response->print(path.c_str());
-    response->print(F("</h2>"));
-    if (this->upload_enabled_)
-      response->print(F("<form method=\"POST\" enctype=\"multipart/form-data\">"
-                        "<input type=\"file\" name=\"file\"><input type=\"submit\" value=\"upload\"></form>"));
-    response->print(F("<a href=\"/"));
-    response->print(this->url_prefix_.c_str());
-    response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
-    
-    auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
-    for (auto const &entry : entries)
-      write_row(response, entry);
+  response->print(path.c_str());
+  response->print(F("</h2>"));
+  if (this->upload_enabled_)
+    response->print(F("<form method=\"POST\" enctype=\"multipart/form-data\">"
+                      "<input type=\"file\" name=\"file\"><input type=\"submit\" value=\"upload\"></form>"));
+  response->print(F("<a href=\"/"));
+  response->print(this->url_prefix_.c_str());
+  response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
+  auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
+  for (auto const &entry : entries)
+    write_row(response, entry);
 
-    response->print(F("</tbody></table>"
-                      "<script>"
-                      "function delete_file(path) {"
-                      "  if (confirm('Are you sure you want to delete this file?')) {"
-                      "    fetch(path, {method: \"DELETE\"})"
-                      "      .then(response => response.json())"
-                      "      .then(data => {"
-                      "        if (data.success) {"
-                      "          alert('File deleted successfully');"
-                      "          location.reload();"
-                      "        } else {"
-                      "          alert('Error: ' + (data.error || 'Failed to delete file'));"
-                      "        }"
-                      "      })"
-                      "      .catch(error => {"
-                      "        console.error('Error:', error);"
-                      "        alert('Error deleting file');"
-                      "      });"
-                      "  }"
-                      "}"
-                      "function download_file(path, filename) {"
-                      "  fetch(path)"
-                      "    .then(response => {"
-                      "      if (!response.ok) {"
-                      "        throw new Error('Network response was not ok');"
-                      "      }"
-                      "      return response.blob();"
-                      "    })"
-                      "    .then(blob => {"
-                      "      const link = document.createElement('a');"
-                      "      link.href = URL.createObjectURL(blob);"
-                      "      link.download = filename;"
-                      "      document.body.appendChild(link);"
-                      "      link.click();"
-                      "      document.body.removeChild(link);"
-                      "    })"
-                      "    .catch(error => {"
-                      "      console.error('Download error:', error);"
-                      "      alert('Error downloading file: ' + error.message);"
-                      "    });"
-                      "}"
-                      "</script>"
-                      "</body></html>"));
+  response->print(F("</tbody></table>"
+                    "<script>"
+                    "function delete_file(path) {fetch(path, {method: \"DELETE\"});}"
+                    "function download_file(path, filename) {"
+                    "fetch(path).then(response => response.blob())"
+                    ".then(blob => {"
+                    "const link = document.createElement('a');"
+                    "link.href = URL.createObjectURL(blob);"
+                    "link.download = filename;"
+                    "link.click();"
+                    "}).catch(console.error);"
+                    "} "
+                    "</script>"
+                    "</body></html>"));
 
-    request->send(response);
-  } catch (std::exception &e) {
-    ESP_LOGE(TAG, "Index handling error: %s", e.what());
-    request->send(500, "application/json", "{ \"error\": \"internal server error\" }");
-  }
+  request->send(response);
 }
 
 void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
@@ -268,65 +170,19 @@ void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string c
     return;
   }
 
-  try {
-    // Vérifier si le fichier existe
-    if (!this->sd_mmc_card_->exists(path) || this->sd_mmc_card_->is_directory(path)) {
-      request->send(404, "application/json", "{ \"error\": \"file not found\" }");
-      return;
-    }
-
-    std::vector<uint8_t> file;
-    try {
-      file = this->sd_mmc_card_->read_file(path);
-    } catch (std::exception &e) {
-      ESP_LOGE(TAG, "Error reading file: %s", e.what());
-      request->send(500, "application/json", "{ \"error\": \"failed to read file\" }");
-      return;
-    }
-    
-    if (file.size() == 0) {
-      request->send(404, "application/json", "{ \"error\": \"empty or unreadable file\" }");
-      return;
-    }
-    
-    std::string content_type = "application/octet-stream";
-    // Déterminer le type MIME si possible
-    std::string extension = "";
-    size_t pos = path.find_last_of(".");
-    if (pos != std::string::npos) {
-      extension = path.substr(pos + 1);
-      if (extension == "jpg" || extension == "jpeg") content_type = "image/jpeg";
-      else if (extension == "png") content_type = "image/png";
-      else if (extension == "txt") content_type = "text/plain";
-      else if (extension == "html" || extension == "htm") content_type = "text/html";
-      else if (extension == "css") content_type = "text/css";
-      else if (extension == "js") content_type = "application/javascript";
-      else if (extension == "json") content_type = "application/json";
-      else if (extension == "pdf") content_type = "application/pdf";
-    }
-    
-    AsyncWebServerResponse *response = nullptr;
-    
-#ifdef USE_ESP_IDF
-    response = request->beginResponse_P(200, content_type.c_str(), file.data(), file.size());
-#else
-    response = request->beginResponseStream(content_type.c_str(), file.size());
-    response->write(file.data(), file.size());
-#endif
-    
-    if (response != nullptr) {
-      std::string filename = Path::file_name(path);
-      response->addHeader("Content-Disposition", ("attachment; filename=\"" + filename + "\"").c_str());
-      response->addHeader("Cache-Control", "no-cache");
-      
-      request->send(response);
-    } else {
-      request->send(500, "application/json", "{ \"error\": \"failed to create response\" }");
-    }
-  } catch (std::exception &e) {
-    ESP_LOGE(TAG, "Download error: %s", e.what());
-    request->send(500, "application/json", "{ \"error\": \"internal server error\" }");
+  auto file = this->sd_mmc_card_->read_file(path);
+  if (file.size() == 0) {
+    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+    return;
   }
+#ifdef USE_ESP_IDF
+  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
+#else
+  auto *response = request->beginResponseStream("application/octet", file.size());
+  response->write(file.data(), file.size());
+#endif
+
+  request->send(response);
 }
 
 void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
@@ -334,32 +190,17 @@ void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
     request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
     return;
   }
-  
-  try {
-    std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-    std::string path = this->build_absolute_path(extracted);
-    
-    // Vérifier si le fichier existe
-    if (!this->sd_mmc_card_->exists(path)) {
-      request->send(404, "application/json", "{ \"error\": \"file not found\" }");
-      return;
-    }
-    
-    if (this->sd_mmc_card_->is_directory(path)) {
-      request->send(400, "application/json", "{ \"error\": \"cannot delete a directory\" }");
-      return;
-    }
-    
-    if (this->sd_mmc_card_->delete_file(path)) {
-      request->send(200, "application/json", "{ \"success\": true, \"message\": \"file deleted successfully\" }");
-      return;
-    }
-    
-    request->send(500, "application/json", "{ \"error\": \"failed to delete file\" }");
-  } catch (std::exception &e) {
-    ESP_LOGE(TAG, "Delete error: %s", e.what());
-    request->send(500, "application/json", "{ \"error\": \"internal server error\" }");
+  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
+  std::string path = this->build_absolute_path(extracted);
+  if (this->sd_mmc_card_->is_directory(path)) {
+    request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
+    return;
   }
+  if (this->sd_mmc_card_->delete_file(path)) {
+    request->send(204, "application/json", "{}");
+    return;
+  }
+  request->send(401, "application/json", "{ \"error\": \"failed to delete file\" }");
 }
 
 std::string SDFileServer::build_prefix() const {
