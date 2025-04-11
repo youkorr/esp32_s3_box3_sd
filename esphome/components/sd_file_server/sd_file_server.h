@@ -24,7 +24,7 @@ class SDFileServer : public Component, public AsyncWebHandler {
   void set_deletion_enabled(bool);
   void set_download_enabled(bool);
   void set_upload_enabled(bool);
-  bool file_exists(const std::string &path) const;
+  
 
  protected:
   web_server_base::WebServerBase *base_;
