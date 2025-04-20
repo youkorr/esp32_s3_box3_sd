@@ -1,258 +1,378 @@
-#include "sd_file_server.h"
-#include "esphome/core/log.h"
-#include "esphome/components/network/util.h"
-#include "esphome/core/helpers.h"
+#include "webdav_server.h"
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <dirent.h>
+#include <cstring>
+#include <algorithm>
 
 namespace esphome {
-namespace sd_file_server {
+namespace webdavbox {
 
-static const char *TAG = "sd_file_server";
+static const char* TAG = "webdavbox_server";
 
-SDFileServer::SDFileServer(web_server_base::WebServerBase *base) : base_(base) {}
+void WebDavServer::setup() {
+  if (!base_) {
+    ESP_LOGE(TAG, "WebServer base not set");
+    return;
+  }
 
-void SDFileServer::setup() { this->base_->add_handler(this); }
-
-void SDFileServer::dump_config() {
-  ESP_LOGCONFIG(TAG, "SD File Server:");
-  ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
-  ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
-  ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-  ESP_LOGCONFIG(TAG, "  Deletation Enabled: %s", TRUEFALSE(this->deletion_enabled_));
-  ESP_LOGCONFIG(TAG, "  Download Enabled : %s", TRUEFALSE(this->download_enabled_));
-  ESP_LOGCONFIG(TAG, "  Upload Enabled : %s", TRUEFALSE(this->upload_enabled_));
+  register_webdav_handlers();
+  ESP_LOGI(TAG, "WebDAV handlers registered");
 }
 
-bool SDFileServer::canHandle(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "can handle %s %u", request->url().c_str(),
-           str_startswith(std::string(request->url().c_str()), this->build_prefix()));
-  return str_startswith(std::string(request->url().c_str()), this->build_prefix());
+void WebDavServer::loop() {
+  // Aucune action nécessaire dans la boucle
 }
 
-void SDFileServer::handleRequest(AsyncWebServerRequest *request) {
-  ESP_LOGD(TAG, "%s", request->url().c_str());
-  if (str_startswith(std::string(request->url().c_str()), this->build_prefix())) {
+void WebDavServer::register_webdav_handlers() {
+  base_->add_handler([this](AsyncWebServerRequest* request) {
+    if (request->method() == HTTP_PROPFIND) {
+      handle_propfind(request);
+      return true;
+    }
+    return false;
+  });
+
+  base_->add_handler([this](AsyncWebServerRequest* request) {
     if (request->method() == HTTP_GET) {
-      this->handle_get(request);
-      return;
+      handle_get(request);
+      return true;
     }
+    return false;
+  });
+
+  base_->add_handler([this](AsyncWebServerRequest* request) {
+    if (request->method() == HTTP_PUT) {
+      handle_put(request);
+      return true;
+    }
+    return false;
+  });
+
+  base_->add_handler([this](AsyncWebServerRequest* request) {
     if (request->method() == HTTP_DELETE) {
-      this->handle_delete(request);
-      return;
+      handle_delete(request);
+      return true;
+    }
+    return false;
+  });
+
+  base_->add_handler([this](AsyncWebServerRequest* request) {
+    if (request->method() == HTTP_MKCOL) {
+      handle_mkcol(request);
+      return true;
+    }
+    return false;
+  });
+}
+
+bool WebDavServer::authenticate_request(AsyncWebServerRequest* request) {
+  // Si aucun nom d'utilisateur/mot de passe n'est défini, pas d'authentification
+  if (username_.empty() || password_.empty()) {
+    return true;
+  }
+
+  // Vérification de l'authentification Basic
+  if (!request->hasHeader("Authorization")) {
+    request->send(401, "text/plain", "Authentication required");
+    return false;
+  }
+
+  String auth_header = request->header("Authorization");
+  if (!auth_header.startsWith("Basic ")) {
+    request->send(401, "text/plain", "Invalid authentication method");
+    return false;
+  }
+
+  // TODO: Implémenter le décodage Base64 et la vérification
+  return true;
+}
+
+std::string WebDavServer::resolve_sd_path(const std::string& request_path) {
+  std::string full_path = sd_mount_point_;
+  
+  std::string clean_path = request_path;
+  if (clean_path.empty() || clean_path == "/") {
+    clean_path = "";
+  }
+
+  if (!clean_path.empty() && clean_path[0] == '/') {
+    clean_path = clean_path.substr(1);
+  }
+
+  full_path += "/" + clean_path;
+  return full_path;
+}
+
+void WebDavServer::send_webdav_response(AsyncWebServerRequest* request, 
+                                         int status_code, 
+                                         const std::string& content_type, 
+                                         const std::string& body) {
+  AsyncWebServerResponse* response = request->beginResponse(status_code, content_type.c_str(), body.c_str());
+  request->send(response);
+}
+
+void WebDavServer::handle_propfind(AsyncWebServerRequest* request) {
+  if (!authenticate_request(request)) {
+    return;
+  }
+
+  std::string path = request->url();
+  std::string full_path = resolve_sd_path(path);
+  
+  DIR* dir = opendir(full_path.c_str());
+  if (!dir) {
+    send_webdav_response(request, 404, "text/plain", "Not Found");
+    return;
+  }
+
+  std::string xml_response = 
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+    "<D:multistatus xmlns:D=\"DAV:\">\n";
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != nullptr) {
+    if (entry->d_name[0] == '.') continue;
+
+    std::string entry_path = full_path + "/" + entry->d_name;
+    struct stat path_stat;
+    if (stat(entry_path.c_str(), &path_stat) == 0) {
+      xml_response += 
+        "  <D:response>\n"
+        "    <D:href>" + path + "/" + entry->d_name + "</D:href>\n"
+        "    <D:propstat>\n"
+        "      <D:prop>\n"
+        "        <D:resourcetype>" + 
+        (S_ISDIR(path_stat.st_mode) ? "<D:collection/>" : "") + 
+        "</D:resourcetype>\n"
+        "        <D:getcontentlength>" + std::to_string(path_stat.st_size) + "</D:getcontentlength>\n"
+        "      </D:prop>\n"
+        "      <D:status>HTTP/1.1 200 OK</D:status>\n"
+        "    </D:propstat>\n"
+        "  </D:response>\n";
     }
   }
+  closedir(dir);
+
+  xml_response += "</D:multistatus>";
+  send_webdav_response(request, 207, "application/xml", xml_response);
 }
 
-void SDFileServer::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                                size_t len, bool final) {
-  if (!this->upload_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file upload is disabled\" }");
-    return;
-  }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
-
-  if (index == 0 && !this->sd_mmc_card_->is_directory(path)) {
-    auto response = request->beginResponse(401, "application/json", "{ \"error\": \"invalid upload folder\" }");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
-  std::string file_name(filename.c_str());
-  if (index == 0) {
-    ESP_LOGD(TAG, "uploading file %s to %s", file_name.c_str(), path.c_str());
-    this->sd_mmc_card_->write_file(Path::join(path, file_name).c_str(), data, len);
-    return;
-  }
-  this->sd_mmc_card_->append_file(Path::join(path, file_name).c_str(), data, len);
-  if (final) {
-    auto response = request->beginResponse(201, "text/html", "upload success");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    return;
-  }
-}
-
-void SDFileServer::set_url_prefix(std::string const &prefix) { this->url_prefix_ = prefix; }
-
-void SDFileServer::set_root_path(std::string const &path) { this->root_path_ = path; }
-
-void SDFileServer::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { this->sd_mmc_card_ = card; }
-
-void SDFileServer::set_deletion_enabled(bool allow) { this->deletion_enabled_ = allow; }
-
-void SDFileServer::set_download_enabled(bool allow) { this->download_enabled_ = allow; }
-
-void SDFileServer::set_upload_enabled(bool allow) { this->upload_enabled_ = allow; }
-
-void SDFileServer::handle_get(AsyncWebServerRequest *request) const {
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
-
-  if (!this->sd_mmc_card_->is_directory(path)) {
-    handle_download(request, path);
+void WebDavServer::handle_get(AsyncWebServerRequest* request) {
+  if (!authenticate_request(request)) {
     return;
   }
 
-  handle_index(request, path);
-}
+  std::string path = request->url();
+  std::string full_path = resolve_sd_path(path);
+  
+  FILE* file = fopen(full_path.c_str(), "rb");
+  if (!file) {
+    send_webdav_response(request, 404, "text/plain", "File Not Found");
+    return;
+  }
 
-void SDFileServer::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
-  std::string uri = "/" + Path::join(this->url_prefix_, Path::remove_root_path(info.path, this->root_path_));
-  std::string file_name = Path::file_name(info.path);
-  response->print("<tr><td>");
-  if (info.is_directory) {
-    response->print("<a href=\"");
-    response->print(uri.c_str());
-    response->print("\">");
-    response->print(file_name.c_str());
-    response->print("</a>");
+  // Obtenir la taille du fichier
+  fseek(file, 0, SEEK_END);
+  long file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  // Définir la taille du buffer en fonction de la taille du fichier
+  size_t buffer_size;
+  if (file_size < 1024) {
+    // Petit fichier : lecture complète
+    buffer_size = file_size;
+  } else if (file_size < 1024 * 1024) {
+    // Fichier moyen : buffer de 4 Ko
+    buffer_size = 4 * 1024;
   } else {
-    response->print(file_name.c_str());
+    // Gros fichier : buffer de 32 Ko
+    buffer_size = 32 * 1024;
   }
-  response->print("</td><td>");
-  if (!info.is_directory) {
-    if (this->download_enabled_) {
-      response->print("<button onClick=\"download_file('");
-      response->print(uri.c_str());
-      response->print("','");
-      response->print(file_name.c_str());
-      response->print("')\">Download</button>");
+
+  // Créer un contexte de streaming
+  struct FileStreamContext {
+    FILE* file;
+    long total_size;
+    long bytes_sent;
+    size_t buffer_size;
+  };
+
+  FileStreamContext* context = new FileStreamContext{
+    file, 
+    file_size, 
+    0, 
+    buffer_size
+  };
+
+  AsyncWebServerResponse* response = request->beginResponse(
+    "application/octet-stream", 
+    file_size, 
+    [context](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
+      // Si tous les octets ont été envoyés, libérer les ressources
+      if (context->bytes_sent >= context->total_size) {
+        fclose(context->file);
+        delete context;
+        return 0;
+      }
+
+      // Calculer la quantité de données à lire
+      size_t bytes_to_read = std::min(
+        maxLen, 
+        std::min(
+          context->buffer_size, 
+          static_cast<size_t>(context->total_size - context->bytes_sent)
+        )
+      );
+
+      // Lire les données
+      size_t bytes_read = fread(buffer, 1, bytes_to_read, context->file);
+      
+      // Mettre à jour le compteur d'octets envoyés
+      context->bytes_sent += bytes_read;
+
+      // Gérer la progression et la mémoire
+      if (context->bytes_sent % (1024 * 1024) == 0) {
+        ESP_LOGD(TAG, "Streaming file: %ld/%ld bytes", 
+                 context->bytes_sent, context->total_size);
+      }
+
+      return bytes_read;
     }
-    if (this->deletion_enabled_) {
-      response->print("<button onClick=\"delete_file('");
-      response->print(uri.c_str());
-      response->print("')\">Delete</button>");
-    }
-  }
-  response->print("</td></tr>");
-}
+  );
 
-void SDFileServer::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
-  AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->print(F("<!DOCTYPE html><html lang=\"en\"><head><meta charset=UTF-8><meta "
-                    "name=viewport content=\"width=device-width, initial-scale=1,user-scalable=no\">"
-                    "</head><body>"
-                    "<h1>SD Card Content</h1><h2>Folder "));
-
-  response->print(path.c_str());
-  response->print(F("</h2>"));
-  if (this->upload_enabled_)
-    response->print(F("<form method=\"POST\" enctype=\"multipart/form-data\">"
-                      "<input type=\"file\" name=\"file\"><input type=\"submit\" value=\"upload\"></form>"));
-  response->print(F("<a href=\"/"));
-  response->print(this->url_prefix_.c_str());
-  response->print(F("\">Home</a></br></br><table id=\"files\"><thead><tr><th>Name<th>Actions<tbody>"));
-  auto entries = this->sd_mmc_card_->list_directory_file_info(path, 0);
-  for (auto const &entry : entries)
-    write_row(response, entry);
-
-  response->print(F("</tbody></table>"
-                    "<script>"
-                    "function delete_file(path) {fetch(path, {method: \"DELETE\"});}"
-                    "function download_file(path, filename) {"
-                    "fetch(path).then(response => response.blob())"
-                    ".then(blob => {"
-                    "const link = document.createElement('a');"
-                    "link.href = URL.createObjectURL(blob);"
-                    "link.download = filename;"
-                    "link.click();"
-                    "}).catch(console.error);"
-                    "} "
-                    "</script>"
-                    "</body></html>"));
+  // Définir des en-têtes supplémentaires
+  response->addHeader("Accept-Ranges", "bytes");
+  response->addHeader("Content-Disposition", 
+    "attachment; filename=\"" + std::string(strrchr(full_path.c_str(), '/') + 1) + "\"");
 
   request->send(response);
 }
 
-void SDFileServer::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
-  if (!this->download_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file download is disabled\" }");
+void WebDavServer::handle_put(AsyncWebServerRequest* request) {
+  if (!authenticate_request(request)) {
     return;
   }
 
-  auto file = this->sd_mmc_card_->read_file(path);
-  if (file.size() == 0) {
-    request->send(401, "application/json", "{ \"error\": \"failed to read file\" }");
+  std::string path = request->url();
+  std::string full_path = resolve_sd_path(path);
+  
+  // Vérifier l'espace disponible
+  struct statvfs stat;
+  if (statvfs(sd_mount_point_.c_str(), &stat) != 0) {
+    send_webdav_response(request, 507, "text/plain", "Insufficient Storage");
     return;
   }
-#ifdef USE_ESP_IDF
-  auto *response = request->beginResponse_P(200, "application/octet", file.data(), file.size());
-#else
-  auto *response = request->beginResponseStream("application/octet", file.size());
-  response->write(file.data(), file.size());
-#endif
 
-  request->send(response);
-}
-
-void SDFileServer::handle_delete(AsyncWebServerRequest *request) {
-  if (!this->deletion_enabled_) {
-    request->send(401, "application/json", "{ \"error\": \"file deletion is disabled\" }");
+  // Vérifier la taille du fichier à télécharger
+  if (request->contentLength() > stat.f_bfree * stat.f_frsize) {
+    send_webdav_response(request, 507, "text/plain", "File Too Large");
     return;
   }
-  std::string extracted = this->extract_path_from_url(std::string(request->url().c_str()));
-  std::string path = this->build_absolute_path(extracted);
-  if (this->sd_mmc_card_->is_directory(path)) {
-    request->send(401, "application/json", "{ \"error\": \"cannot delete a directory\" }");
+
+  // Contexte de streaming pour l'upload
+  struct FileUploadContext {
+    FILE* file;
+    size_t total_size;
+    size_t bytes_received;
+    bool upload_complete;
+  };
+
+  FileUploadContext* context = new FileUploadContext{
+    fopen(full_path.c_str(), "wb"),
+    request->contentLength(),
+    0,
+    false
+  };
+
+  if (!context->file) {
+    delete context;
+    send_webdav_response(request, 500, "text/plain", "Could not create file");
     return;
   }
-  if (this->sd_mmc_card_->delete_file(path)) {
-    request->send(204, "application/json", "{}");
+
+  request->onBody([this, request, context, full_path](AsyncWebServerRequest* req, 
+                                                     uint8_t* data, 
+                                                     size_t len, 
+                                                     size_t index, 
+                                                     size_t total) {
+    // Écrire les données
+    size_t bytes_written = fwrite(data, 1, len, context->file);
+    context->bytes_received += bytes_written;
+
+    // Progression du téléchargement
+    if (context->bytes_received % (1024 * 1024) == 0) {
+      ESP_LOGD(TAG, "Uploading file: %zu/%zu bytes", 
+               context->bytes_received, context->total_size);
+    }
+
+    // Vérifier si le téléchargement est terminé
+    if (context->bytes_received >= context->total_size) {
+      fclose(context->file);
+      context->upload_complete = true;
+      send_webdav_response(request, 201, "text/plain", "File Created");
+      delete context;
+    }
+  });
+
+  // Gestion des erreurs d'upload
+  request->onError([this, context, full_path](AsyncWebServerRequest* req, int error) {
+    if (context->file) {
+      fclose(context->file);
+      remove(full_path.c_str());
+    }
+    delete context;
+    send_webdav_response(req, 500, "text/plain", "Upload Failed");
+  });
+}
+
+void WebDavServer::handle_delete(AsyncWebServerRequest* request) {
+  if (!authenticate_request(request)) {
     return;
   }
-  request->send(401, "application/json", "{ \"error\": \"failed to delete file\" }");
-}
 
-std::string SDFileServer::build_prefix() const {
-  if (this->url_prefix_.length() == 0 || this->url_prefix_.at(0) != '/')
-    return "/" + this->url_prefix_;
-  return this->url_prefix_;
-}
-
-std::string SDFileServer::extract_path_from_url(std::string const &url) const {
-  std::string prefix = this->build_prefix();
-  return url.substr(prefix.size(), url.size() - prefix.size());
-}
-
-std::string SDFileServer::build_absolute_path(std::string relative_path) const {
-  if (relative_path.size() == 0)
-    return this->root_path_;
-
-  std::string absolute = Path::join(this->root_path_, relative_path);
-  return absolute;
-}
-
-std::string Path::file_name(std::string const &path) {
-  size_t pos = path.rfind(Path::separator);
-  if (pos != std::string::npos) {
-    return path.substr(pos + 1);
+  std::string path = request->url();
+  std::string full_path = resolve_sd_path(path);
+  
+  struct stat path_stat;
+  if (stat(full_path.c_str(), &path_stat) != 0) {
+    send_webdav_response(request, 404, "text/plain", "Not Found");
+    return;
   }
-  return "";
-}
 
-bool Path::is_absolute(std::string const &path) { return path.size() && path[0] == separator; }
-
-bool Path::trailing_slash(std::string const &path) { return path.size() && path[path.length() - 1] == separator; }
-
-std::string Path::join(std::string const &first, std::string const &second) {
-  std::string result = first;
-  if (!trailing_slash(first) && !is_absolute(second)) {
-    result.push_back(separator);
+  if (S_ISDIR(path_stat.st_mode)) {
+    if (rmdir(full_path.c_str()) == 0) {
+      send_webdav_response(request, 204, "text/plain", "Deleted");
+    } else {
+      send_webdav_response(request, 403, "text/plain", "Forbidden");
+    }
+  } else {
+    if (remove(full_path.c_str()) == 0) {
+      send_webdav_response(request, 204, "text/plain", "Deleted");
+    } else {
+      send_webdav_response(request, 403, "text/plain", "Forbidden");
+    }
   }
-  if (trailing_slash(first) && is_absolute(second)) {
-    result.pop_back();
+}
+
+void WebDavServer::handle_mkcol(AsyncWebServerRequest* request) {
+  if (!authenticate_request(request)) {
+    return;
   }
-  result.append(second);
-  return result;
+
+  std::string path = request->url();
+  std::string full_path = resolve_sd_path(path);
+  
+  if (mkdir(full_path.c_str(), 0755) == 0) {
+    send_webdav_response(request, 201, "text/plain", "Created");
+  } else {
+    if (errno == EEXIST) {
+      send_webdav_response(request, 405, "text/plain", "Method Not Allowed");
+    } else {
+      send_webdav_response(request, 409, "text/plain", "Conflict");
+    }
+  }
 }
 
-std::string Path::remove_root_path(std::string path, std::string const &root) {
-  if (!str_startswith(path, root))
-    return path;
-  if (path.size() == root.size() || path.size() < 2)
-    return "/";
-  return path.erase(0, root.size());
-}
-
-}  // namespace sd_file_server
-}  // namespace esphome
+} // namespace webdavbox
+} // namespace esphome
